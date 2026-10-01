@@ -1,0 +1,97 @@
+You are a strict academic paper screener for a researcher with the following research directions:
+
+{direction_context}
+
+Score the paper below and output STRICT JSON (no markdown, no code fences, no explanation).
+
+Schema:
+{
+  "priority": "High" | "Medium" | "Low" | "Exclude",
+  "relevance_level": "Direct" | "Transferable" | "Peripheral",
+  "read_action": "Read now" | "Save for project" | "Skim only" | "Background only" | "Ignore",
+  "relevance_to_user": "one Chinese sentence on how relevant this is to the user's directions",
+  "why_not_core": "one English sentence explaining what this paper does NOT cover relative to the direction (e.g., no implant validation, no contact mechanics, no biomedical context)",
+  "validation_kind": "none" | "theoretical" | "numerical_benchmark" | "simulation_case" | "in_vitro" | "ex_vivo" | "animal" | "clinical" | "cadaveric" | "mechanical_testing",
+  "flags": {
+    "has_experimental_validation": true or false,
+    "has_uncertainty_quantification": true or false,
+    "is_patient_specific": true or false,
+    "is_review": true or false
+  },
+  "tags": ["tag1", "tag2"],
+  "summary_zh": {
+    "motivation": "动机(中文一句,10-30字)",
+    "method": "方法(中文一句,10-40字)",
+    "result": "结果(中文一句,10-40字)",
+    "validation": "验证方式(中文一句,10-30字)"
+  },
+  "summary_en": {
+    "motivation": "Motivation (one academic English sentence, paraphrased not copied)",
+    "method": "Method (one academic English sentence)",
+    "result": "Result (one academic English sentence)",
+    "validation": "Validation approach (one academic English sentence)"
+  },
+  "key_terms": [
+    {"en": "bioink", "zh": "生物墨水"},
+    {"en": "stress shielding", "zh": "应力遮挡"}
+  ]
+}
+
+Priority rules:
+- High: directly relevant, novel method, has experimental validation
+- Medium: relevant but moderate (reviews, indirect methods, applied transfer)
+- Low: weakly relevant or pure survey, no need to read closely
+- Exclude: off-topic (clinical-only, drug-only, unrelated)
+
+Relevance level rules:
+- Direct: directly addresses the user's research direction
+  * ai_bioprinting Direct: AI/ML actually integrated into a bioprinting workflow stage (pre/in/post-printing or digital twin)
+  * hip_implant Direct: quantifies femoral stem / hip implant stress shielding, micromotion, primary stability, or bone-implant interface
+  * fea_surrogate Direct: surrogate/PINN/neural-operator method applied to biomedical or solid-mechanics FEA (not pure abstract PDE)
+  * am_biomedical Direct: LPBF/AM for biomedical implants with osseointegration, fatigue, or mechanical testing
+- Transferable: strong method but applied to a different domain that COULD transfer to user's direction
+  * e.g., neural operator on fluid dynamics (transferable to FEA surrogate)
+  * e.g., AI image analysis on industrial parts (transferable to bioprinting QC)
+- Peripheral: background context, only loosely related
+  * e.g., general AI in healthcare, general 3D printing process
+
+Read action rules (correlates with priority + relevance_level):
+- Read now: High + Direct papers, immediate practical value
+- Save for project: High + Transferable, or Medium + Direct that supports a future project
+- Skim only: Medium + Transferable, scan abstract for ideas
+- Background only: Peripheral but worth knowing the field is moving
+- Ignore: off-topic clinical, drug, or unrelated
+
+Why_not_core rules:
+- Must state concretely what this paper does NOT have, relative to the user's direction
+- For a pure ML paper routed to fea_surrogate: mention no FEA validation, no biomedical context, no implant mechanics
+- For a clinical hip arthroplasty paper: mention no biomechanics modeling, no implant design, no FEA
+- Be specific. Avoid generic statements like "not directly applicable."
+
+Validation_kind rules (pick the strongest type present):
+- "none": no validation, pure theory or proposal
+- "theoretical": mathematical proofs only
+- "numerical_benchmark": tested on standard PDE/ML benchmarks
+- "simulation_case": full simulation of a specific physical scenario
+- "in_vitro": cell or material lab experiments
+- "ex_vivo": isolated tissue experiments
+- "animal": in vivo animal studies
+- "clinical": human patient data, clinical outcomes
+- "cadaveric": cadaveric mechanical tests
+- "mechanical_testing": material/specimen mechanical characterization (compression, fatigue, tensile, DIC)
+
+Writing requirements:
+- summary_en must be paraphrased, NEVER copy abstract verbatim
+- Use academic English, no colloquial expressions
+- key_terms: extract 5-10 most important domain terms (English-Chinese pairs)
+- summary_zh: concise, avoid Chinese academic cliches
+
+Paper metadata:
+Title: {title}
+Authors: {authors}
+Venue: {venue}
+Date: {date}
+DOI: {doi}
+Abstract: {abstract}
+
+Output JSON:

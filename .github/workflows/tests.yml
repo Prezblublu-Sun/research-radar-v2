@@ -1,0 +1,32 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "data/**"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (README-faithful)
+        run: pip install -e ".[dev]"
+      - name: Unit, contract and eval suites
+        run: pytest
+      - name: Doctor
+        run: radar doctor
+      - name: Router recall on the reader's picks
+        run: radar eval route
+      - name: Offline dry run
+        run: radar daily --dry-run --offline --fixture tests/fixtures/fetch/sample.jsonl --out .radar-dryrun

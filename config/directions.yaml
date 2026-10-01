@@ -1,0 +1,424 @@
+# Research Radar v2 — six directions derived from 121 hand-picked 待读 papers
+# (2026-10-01). Groups 1–5 are the method half (90 picks, mostly Transferable);
+# group 6 is the domain anchor (31 picks, all Direct). The intersection is the
+# thesis, and the crossover rule at the bottom is what makes it float to High.
+#
+# Routing contract (unchanged from v1): a strong_keyword scores 2.0, a
+# must_pair_with pair 3.0, min_score 2.0 — one strong hit routes. Recall over
+# precision: pairs widen reach, they are not gates.
+#
+# OpenAlex concept IDs below were verified against api.openalex.org/concepts on
+# 2026-10-01. Concepts the API does not have (digital twin, multi-fidelity,
+# neural operator, PINN) are covered by openalex_keywords instead.
+
+directions:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1. Geometry-aware operator learning
+  #    30 picks. What you kept: operators that survive a change of mesh or
+  #    domain (DiSOL, CATO, PGD-NO, Neural-Schwarz, DeepFEAv2, MeshGraphNet).
+  #    What you skipped: fixed-grid FNO benchmarks.
+  # ───────────────────────────────────────────────────────────────────────────
+  geo_operator:
+    display_name: "几何自适应算子学习 · Geometry-aware Operator Learning"
+    color: "#D85A30"
+    sources:
+      arxiv_categories: ["cs.LG", "cs.CE", "cs.NA", "math.NA", "stat.ML"]
+      openalex_concepts:
+        - "C93779851"    # Partial differential equation
+        - "C135628077"   # Finite element method
+      openalex_keywords: ["neural operator", "operator learning", "DeepONet", "Fourier neural operator", "mesh-based simulation", "graph neural network simulation"]
+      pubmed_terms: []
+    strong_keywords:
+      - "neural operator"
+      - "neural operators"
+      - "operator learning"
+      - "full-field prediction"
+      - "physical field prediction"
+      - "DeepONet"
+      - "Fourier neural operator"
+      - "FNO"
+      - "MeshGraphNet"
+      - "mesh-based graph neural network"
+      - "graph neural network surrogate"
+      - "geometry-dependent PDE"
+      - "irregular domain"
+      - "unstructured mesh"
+      - "domain decomposition"
+      - "learned simulator"
+      - "transient finite element"
+    must_pair_with:
+      - ["neural operator", "geometry"]
+      - ["neural operator", "mesh"]
+      - ["graph neural network", "finite element"]
+      - ["transformer", "PDE"]
+      - ["attention", "irregular"]
+    tag_namespace: "GEO"
+    subtopics:
+      Operators: ["DeepONet", "FNO", "neural operator", "spectral"]
+      Graph: ["GNN", "MeshGraphNet", "hypergraph", "bipartite graph"]
+      Geometry: ["geometry-dependent", "variable domain", "domain decomposition", "Schwarz"]
+      Scale: ["million-scale", "scalable", "memory"]
+    llm_prompt_focus: |
+      For each paper, evaluate:
+      1. Does the method generalise across geometries or meshes, not just across parameters on one fixed grid?
+      2. Is the input an unstructured mesh / point cloud / CAD-like geometry (as opposed to a regular image grid)?
+      3. Does it report accuracy on out-of-distribution geometries?
+      4. Could it ingest a parametrised implant or a patient-specific bone mesh without re-meshing to a grid?
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2. Finite-element-flavoured physics-informed surrogates
+  #    25 picks. You picked weak-form / energy / variational formulations
+  #    (FE-PINNs, EquiNO, IGANets, OA-PINN, WINO, deep energy network) and the
+  #    PINN-training-pathology papers (Scale-PINN, PILIR, TI-PINN).
+  # ───────────────────────────────────────────────────────────────────────────
+  fe_physics_informed:
+    display_name: "有限元化的物理信息网络 · FE-flavoured Physics-informed Surrogates"
+    color: "#B5651D"
+    sources:
+      arxiv_categories: ["cs.LG", "cs.CE", "math.NA", "cs.NA", "physics.comp-ph"]
+      openalex_concepts:
+        - "C135628077"   # Finite element method
+        - "C2779277453"  # Model order reduction
+        - "C147370603"   # Hyperelastic material
+      openalex_keywords: ["physics-informed neural network", "variational physics-informed", "deep energy method", "isogeometric neural network", "reduced-order physics-informed"]
+      pubmed_terms: []
+    strong_keywords:
+      - "physics-informed neural network"
+      - "physics-informed neural networks"
+      - "PINN"
+      - "PINNs"
+      - "physics-guided"
+      - "physics-augmented"
+      - "variational physics-informed"
+      - "weak-form"
+      - "deep energy method"
+      - "energy-based physics-informed"
+      - "finite-element-informed"
+      - "finite element guided"
+      - "isogeometric analysis network"
+      - "IGANet"
+      - "reduced-order model"
+      - "ROM-PINN"
+      - "proper orthogonal decomposition"
+      - "spectral bias"
+      - "discontinuous coefficient"
+    must_pair_with:
+      - ["PINN", "finite element"]
+      - ["PINN", "mechanics"]
+      - ["surrogate", "finite element"]
+      - ["surrogate", "stress"]
+      - ["PINN", "elasticity"]
+      - ["physics-informed", "hyperelastic"]
+      - ["physics-informed", "warm-start"]
+      - ["neural network", "total potential energy"]
+    tag_namespace: "FEPI"
+    subtopics:
+      Formulation: ["weak form", "energy", "variational", "collocation"]
+      FEHybrid: ["finite element", "isogeometric", "Gauss point", "shape function"]
+      ROM: ["POD", "reduced-order", "reduced basis", "Krylov"]
+      Training: ["spectral bias", "sequential correction", "loss weighting", "quasilinearization"]
+    llm_prompt_focus: |
+      For each paper, evaluate:
+      1. Is the physics enforced through a weak / energy / variational form, or only as a strong-form residual penalty?
+      2. Does the network sit on (or reuse) a finite-element discretisation — mesh, basis, quadrature?
+      3. Does it address a known PINN failure mode (spectral bias, stiff losses, discontinuous coefficients, interfaces)?
+      4. Is there a solid-mechanics benchmark with a conventional FE reference solution?
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3. Uncertainty quantification for surrogates
+  #    26 picks across three flavours: Bayesian/GP surrogates, post-hoc UQ on
+  #    operators (REEF-GP, Diffusion Last Layer, conformal in function space),
+  #    propagation through constitutive models (polymorphic, interval/fuzzy).
+  # ───────────────────────────────────────────────────────────────────────────
+  surrogate_uq:
+    display_name: "代理模型不确定性量化 · Uncertainty Quantification for Surrogates"
+    color: "#5B4B8A"
+    sources:
+      arxiv_categories: ["stat.ML", "cs.LG", "stat.ME", "math.NA", "cs.CE"]
+      openalex_concepts:
+        - "C32230216"    # Uncertainty quantification
+        - "C61326573"    # Gaussian process
+        - "C131675550"   # Surrogate model
+      openalex_keywords: ["uncertainty quantification surrogate", "Bayesian neural operator", "conformal prediction", "Gaussian process surrogate", "calibrated uncertainty"]
+      pubmed_terms: []
+    strong_keywords:
+      - "uncertainty quantification"
+      - "Bayesian neural network"
+      - "Bayesian neural operator"
+      - "Gaussian process surrogate"
+      - "conformal prediction"
+      - "deep ensemble"
+      - "Monte Carlo dropout"
+      - "calibrated uncertainty"
+      - "epistemic uncertainty"
+      - "polymorphic uncertainty"
+      - "interval neural network"
+      - "fuzzy neural network"
+      - "failure probability"
+      - "reliability analysis"
+      - "variational inference"
+      - "stochastic PDE"
+    must_pair_with:
+      - ["uncertainty", "surrogate"]
+      - ["uncertainty", "neural operator"]
+      - ["uncertainty", "finite element"]
+      - ["Bayesian", "simulation"]
+      - ["conformal", "function space"]
+      - ["Kriging", "reliability"]
+      - ["Gaussian process", "reliability"]
+      - ["Gaussian process", "structural"]
+      - ["Gaussian process", "finite element"]
+    tag_namespace: "UQ"
+    subtopics:
+      Bayesian: ["Bayesian", "GP", "variational inference", "MCMC"]
+      PostHoc: ["post-hoc", "last layer", "conformal", "ensemble"]
+      Propagation: ["propagation", "polymorphic", "interval", "fuzzy", "random field"]
+      Reliability: ["failure probability", "reliability", "AK-MCS", "certification"]
+    llm_prompt_focus: |
+      For each paper, evaluate:
+      1. Is the uncertainty calibrated and validated (coverage, reliability diagrams), or only produced?
+      2. Does it separate epistemic (model) from aleatoric (input/material) uncertainty?
+      3. Can the UQ be attached to an existing surrogate post hoc, or does it require retraining the whole model?
+      4. Does it scale to full-field outputs (stress/strain fields), not only scalars?
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4. Data-efficient surrogates: multi-fidelity, active learning, transfer
+  #    18 picks. FIRE, MAST, MAGPI, goal-driven adaptive sampling, physics-based
+  #    active learning, REMAL, Pi-PINN closed-form adaptation, surrogates from
+  #    partially-converged FE runs.
+  # ───────────────────────────────────────────────────────────────────────────
+  data_efficient:
+    display_name: "少样本代理：多保真 · 主动学习 · 迁移 — Data-efficient Surrogates"
+    color: "#2E8B57"
+    sources:
+      arxiv_categories: ["cs.LG", "stat.ML", "cs.CE", "math.OC"]
+      openalex_concepts:
+        - "C77967617"    # Active learning (machine learning)
+        - "C131675550"   # Surrogate model
+      openalex_keywords: ["multi-fidelity surrogate", "active learning simulation", "adaptive sampling surrogate", "transfer learning surrogate", "few-shot physics"]
+      pubmed_terms: []
+    strong_keywords:
+      - "multi-fidelity"
+      - "multifidelity"
+      - "active learning"
+      - "adaptive sampling"
+      - "goal-driven sampling"
+      - "experimental design"
+      - "transfer learning"
+      - "warm-start"
+      - "pretraining"
+      - "one-shot transfer"
+      - "test-time adaptation"
+      - "in-context learning"
+      - "scarce data"
+      - "data-efficient"
+      - "sample efficiency"
+    must_pair_with:
+      - ["active learning", "simulation"]
+      - ["active learning", "surrogate"]
+      - ["multi-fidelity", "finite element"]
+      - ["transfer", "PDE"]
+      - ["pretrain", "finite element"]
+      - ["low-fidelity", "high-fidelity"]
+    tag_namespace: "DATA"
+    subtopics:
+      MultiFidelity: ["multi-fidelity", "low-fidelity", "co-kriging", "fusion"]
+      Active: ["active learning", "acquisition", "adaptive sampling", "residual"]
+      Transfer: ["transfer", "pretrain", "warm-start", "foundation model", "in-context"]
+      Robust: ["failed simulations", "non-converged", "partial data"]
+    llm_prompt_focus: |
+      For each paper, evaluate:
+      1. How many expensive (high-fidelity) evaluations does it need, and is that number reported honestly against a baseline?
+      2. Can the cheap signal be a coarse-mesh FE run, a linear model, or an analytical estimate?
+      3. Does the sampling criterion target a quantity of interest (peak stress, micromotion) rather than global error?
+      4. Does it degrade gracefully when some simulations fail to converge?
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 5. Simulation-in-the-loop design optimisation
+  #    17 picks, absorbs the old rl_world_model (4 picks, all "RL on an FE
+  #    environment"). BO (SMOG, hybrid-model, structured-measurement), inverse
+  #    design (dental, fusion cage, CFD), topology optimisation, digital twins.
+  # ───────────────────────────────────────────────────────────────────────────
+  design_loop:
+    display_name: "仿真闭环设计优化 · Simulation-in-the-loop Design"
+    color: "#2E8B8B"
+    sources:
+      arxiv_categories: ["math.OC", "cs.CE", "cs.LG", "cs.RO"]
+      openalex_concepts:
+        - "C2778049539"  # Bayesian optimization
+        - "C68781425"    # Multi-objective optimization
+        - "C189216461"   # Topology optimization
+        - "C135252773"   # Inverse problem
+      openalex_keywords: ["surrogate-assisted optimization", "inverse design implant", "topology optimization implant", "digital twin finite element", "reinforcement learning finite element"]
+      pubmed_terms: ["implant design optimization", "patient-specific implant design"]
+    strong_keywords:
+      - "Bayesian optimization"
+      - "multi-objective optimization"
+      - "surrogate-assisted optimization"
+      - "inverse design"
+      - "inverse materials design"
+      - "closed-loop design"
+      - "topology optimization"
+      - "generative design"
+      - "virtual sensing"
+      - "predict-then-optimize"
+      - "design selection"
+      # RL / world models / MPC / digital twins are NOT bare keywords: on the
+      # 2026-09 corpus they alone pulled in 330 control-and-RL papers, 89% of
+      # which the scorer then marked Low or Exclude. Every RL paper actually
+      # kept had a finite-element or structural simulator in the loop, so
+      # that is the condition.
+    must_pair_with:
+      - ["optimization", "finite element"]
+      - ["optimization", "implant"]
+      - ["inverse design", "lattice"]
+      - ["reinforcement learning", "finite element"]
+      - ["reinforcement learning", "structural"]
+      - ["reinforcement learning", "solver"]
+      - ["world model", "finite element"]
+      - ["world model", "physics simulation"]
+      - ["model predictive control", "digital twin"]
+      - ["digital twin", "finite element"]
+      - ["digital twin", "structural"]
+      - ["digital twin", "additive manufacturing"]
+      - ["Pareto", "surrogate"]
+      - ["closed-loop", "design"]
+    tag_namespace: "DESIGN"
+    subtopics:
+      BO: ["Bayesian optimization", "acquisition", "multi-objective", "Pareto"]
+      Inverse: ["inverse design", "generative", "diffusion", "closed-loop"]
+      Topology: ["topology optimization", "lattice", "metamaterial", "microstructure"]
+      RL: ["reinforcement learning", "world model", "policy", "solver acceleration"]
+      Twin: ["digital twin", "virtual sensing", "real-time", "monitoring"]
+    llm_prompt_focus: |
+      For each paper, evaluate:
+      1. Is the expensive simulator actually inside the loop, and how many calls does the loop make?
+      2. Does it handle constraints (manufacturability, strength, yield) rather than only a single objective?
+      3. Is the design space geometric (shape, lattice, topology) rather than only material parameters?
+      4. Does any part of it close the loop to a fabricated or tested artefact?
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 6. Femoral stem & porous implant biomechanics — the domain anchor
+  #    31 picks, merges old hip_implant (13) and am_biomedical (13) plus the
+  #    porous/TPMS/fatigue cluster. Short stem × Dorr type, stress shielding and
+  #    remodelling, patient-specific CT models, TPMS/gyroid Ti scaffolds with
+  #    fatigue and in vivo data, virtual trials.
+  # ───────────────────────────────────────────────────────────────────────────
+  stem_biomech:
+    display_name: "股骨柄与多孔植入物生物力学 · Femoral Stem & Porous Implant Biomechanics"
+    color: "#C8362A"
+    sources:
+      arxiv_categories: ["physics.med-ph", "q-bio.TO", "physics.bio-ph"]
+      openalex_concepts:
+        - "C3020736514"  # Hip arthroplasty
+        - "C3019025420"  # Total hip arthroplasty
+        - "C2778985418"  # Stress shielding
+        - "C101414908"   # Osseointegration
+        - "C170033053"   # Bone remodeling
+        - "C170700871"   # Biomechanics
+        - "C26796778"    # Selective laser melting
+        - "C2781411149"  # Implant
+      openalex_keywords: ["femoral stem finite element", "short stem primary stability", "stress shielding remodeling", "TPMS implant", "porous titanium implant fatigue"]
+      pubmed_terms: ["femoral stem finite element", "short stem hip arthroplasty biomechanics", "stress shielding femoral", "porous titanium implant osseointegration", "patient-specific finite element hip"]
+    strong_keywords:
+      - "femoral stem"
+      - "short stem"
+      - "neck-sparing"
+      - "hip implant"
+      - "total hip arthroplasty"
+      - "stress shielding"
+      - "micromotion"
+      - "primary stability"
+      - "osseointegration"
+      - "bone remodelling"
+      - "bone remodeling"
+      - "mechanoregulation"
+      - "Dorr"
+      - "Gruen zone"
+      - "bone-implant interface"
+      - "patient-specific finite element"
+      - "subject-specific finite element"
+      - "porous femoral stem"
+      - "porous titanium"
+      - "functionally graded scaffold"
+      - "bone scaffold"
+      - "TPMS"
+      - "gyroid"
+      - "gradient porosity"
+      - "auxetic"
+      - "lattice implant"
+      - "Ti-6Al-4V"
+      - "laser powder bed fusion"
+      - "selective laser melting"
+      - "virtual trial"
+      - "in silico clinical trial"
+    must_pair_with:
+      - ["finite element", "femoral"]
+      - ["finite element", "hip implant"]
+      - ["stress shielding", "stem"]
+      - ["micromotion", "stem"]
+      - ["remodelling", "implant"]
+      - ["remodeling", "implant"]
+      - ["TPMS", "implant"]
+      - ["lattice", "bone"]
+      - ["porous", "implant"]
+      - ["LPBF", "implant"]
+      - ["fatigue", "implant"]
+      - ["osseointegration", "porous"]
+      - ["surrogate", "bone"]
+      - ["surrogate", "implant"]
+    tag_namespace: "STEM"
+    subtopics:
+      Stem: ["femoral stem", "short stem", "collar", "taper", "offset", "neck"]
+      Fixation: ["primary stability", "micromotion", "press-fit", "cemented", "cementless"]
+      Bone: ["stress shielding", "remodelling", "Dorr", "bone quality", "Gruen", "CT-based"]
+      Porous: ["TPMS", "gyroid", "gradient", "lattice", "auxetic", "scaffold"]
+      Manufacturing: ["LPBF", "SLM", "Ti-6Al-4V", "fatigue", "surface"]
+      Evidence: ["in vitro", "in vivo", "cadaver", "virtual trial", "clinical"]
+    llm_prompt_focus: |
+      For each paper, evaluate:
+      1. Which outcome does it measure — stress shielding, micromotion / primary stability, bone remodelling over time, fatigue — and against what loading (gait, ASTM, activities of daily living)?
+      2. Is the bone model patient-specific with heterogeneous properties, or a generic Sawbones / homogeneous femur?
+      3. If the implant is porous or lattice-based, is the structure parametrised (TPMS type, porosity gradient) and is manufacturing addressed?
+      4. Is there any experimental or clinical validation, and of what kind?
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Crossover boost — the thesis lives in the intersection.
+#
+# v1 hard-coded one rule (rl_world_model × fea_surrogate, ADR-0021). For v2 make
+# it configuration: a paper routed into the domain anchor AND any method group
+# is exactly the kind the keyword filter under-finds (only ~5 of 121 picks sat
+# on both sides), so it gets one priority bump. Implement in
+# direction_router.apply_crossover_boost by reading this list.
+# ─────────────────────────────────────────────────────────────────────────────
+crossover_boost:
+  - pair: ["stem_biomech", "geo_operator"]
+    reason: "operator-learning surrogate applied to an implant / bone geometry"
+  - pair: ["stem_biomech", "fe_physics_informed"]
+    reason: "physics-informed surrogate for implant mechanics"
+  - pair: ["stem_biomech", "surrogate_uq"]
+    reason: "uncertainty-aware implant biomechanics"
+  - pair: ["stem_biomech", "data_efficient"]
+    reason: "few-sample surrogate for patient-specific implant FE"
+  - pair: ["stem_biomech", "design_loop"]
+    reason: "closed-loop implant design on a simulator"
+
+exclusions:
+  hard_exclude_if_only_about:
+    - "dental caries"
+    - "orthodontic"
+    - "spinal cord injury"
+    - "drug delivery"
+    - "cell culture"
+    - "gene expression"
+    - "immunology"
+    - "pharmacokinetic"
+    - "wound healing"
+    - "cardiac arrhythmia"
+  ambiguous_terms_require_pairing:
+    - "stem"          # stem cell vs femoral stem
+    - "implant"       # dental / cochlear / breast
+    - "operator"      # medical operator / telecom
+    - "lattice"       # crystal lattice
+    - "remodeling"    # tissue / vascular / cardiac

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# Secrets — never commit
+.env
+.env.*
+*.key
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Derived, never committed (ADR: append-only data, rebuilt views)
+.radar-cache/      # seen-key cache, LLM failure dumps — rebuildable from data/runs
+.radar-dryrun/     # `radar daily --dry-run` output
+_site/             # `radar site build` output; Pages builds it from data/

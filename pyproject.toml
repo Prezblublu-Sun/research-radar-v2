@@ -1,0 +1,34 @@
+[project]
+name = "radar"
+version = "2.0.0"
+description = "Daily research-paper radar: fetch, dedup, route, score, publish"
+requires-python = ">=3.11"
+dependencies = [
+    "arxiv>=2.1.0",
+    "requests>=2.31.0",
+    "openai>=1.40.0",
+    "PyYAML>=6.0.1",
+    "Jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+# `pip install -e ".[dev]"` is the whole onboarding. The test suite must be
+# green after exactly that — no node, no plotting libraries, no secrets.
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+radar = "radar.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["radar*"]
+
+[tool.setuptools.package-data]
+radar = ["site/templates/**/*.j2", "site/static/*"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
