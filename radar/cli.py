@@ -153,6 +153,96 @@ def cmd_alerts_render(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# shared context for the writer commands
+# ---------------------------------------------------------------------------
+
+def _base_context(args, *, run_type: str, dry_run: bool, random_reading: bool = False) -> RunContext:
+    from radar.pipeline.scorer import DeepSeekScorer, DryRunScorer
+    repo = _repo(args)
+    cfg = _config.load(repo / "config" / "directions.yaml")
+    bundle = _prompt.load(repo / "prompts", _prompt_file(args))
+    data_root = DataRoot.at(repo / "data")
+    if dry_run:
+        out_root = DataRoot.at(pathlib.Path(getattr(args, "out", None) or (repo / ".radar-dryrun")) / "data")
+        scorer = DryRunScorer()
+    else:
+        out_root = data_root
+        scorer = DeepSeekScorer(prompt=bundle, failures_dir=data_root.cache / "llm_failures")
+    sources = frozenset(s.strip() for s in (getattr(args, "sources", None) or "arxiv,openalex,pubmed").split(",") if s.strip())
+    return RunContext(data_root=out_root, config=cfg, prompt=bundle, scorer=scorer, fetchers=Fetchers.real(),
+                      today=dt.date.today(), run_type=run_type, sources=sources,
+                      random_reading=random_reading, dry_run=dry_run)
+
+
+# ---------------------------------------------------------------------------
+# radar backfill / rescore / random-reading
+# ---------------------------------------------------------------------------
+
+def cmd_backfill(args) -> int:
+    from radar.pipeline import backfill as _backfill
+    base = _base_context(args, run_type="backfill", dry_run=args.dry_run)
+    report = _backfill.run_backfill(base, args.from_date, args.to_date)
+    print(json.dumps({"months": report.months, "stopped": report.stopped}, ensure_ascii=False, indent=1))
+    return 0 if report.ok else 1
+
+
+def cmd_rescore(args) -> int:
+    from radar.pipeline import rescore as _rescore
+    base = _base_context(args, run_type="rescore", dry_run=False)
+    report = _rescore.run_rescore(base, limit=args.limit, dry_run=args.dry_run)
+    print(json.dumps({"candidates": report.candidates, "attempted": report.attempted,
+                      "succeeded": report.succeeded, "failed": report.failed, "run_path": report.run_path},
+                     ensure_ascii=False, indent=1))
+    return 0 if report.attempted == 0 or report.succeeded else 1
+
+
+def cmd_random_reading(args) -> int:
+    from radar.pipeline import random_topup as _topup
+    if args.from_date and args.to_date:
+        days = _topup.run_days(args.from_date, args.to_date)
+    elif args.days:
+        end = dt.date.today() - dt.timedelta(days=1)
+        days = _topup.run_days((end - dt.timedelta(days=args.days - 1)).isoformat(), end.isoformat())
+    else:
+        print("::error::give --days N, or both --from and --to")
+        return 2
+    base = _base_context(args, run_type="random_reading", dry_run=False, random_reading=True)
+    if args.dry_run:
+        from radar.pipeline.scorer import DryRunScorer
+        import dataclasses
+        base = dataclasses.replace(base, scorer=DryRunScorer(), dry_run=True)
+    report = _topup.run_random_topup(base, days, top_up=args.top_up, dry_run=args.dry_run)
+    print(json.dumps({"days": report.days, "papers": report.papers, "stopped": report.stopped},
+                     ensure_ascii=False, indent=1))
+    return 0 if not report.stopped else 1
+
+
+# ---------------------------------------------------------------------------
+# radar marks
+# ---------------------------------------------------------------------------
+
+def cmd_marks_apply(args) -> int:
+    from radar.marks import apply_sync
+    body = os.environ.get(args.body_env, "") if args.body_env else pathlib.Path(args.body_file).read_text(encoding="utf-8")
+    result = apply_sync.apply(body, DataRoot.at(_repo(args) / "data"), dry_run=args.dry_run)
+    print(("" if result.ok else "::error::") + result.message)
+    if args.summary_file:
+        path = pathlib.Path(args.summary_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(result.message, encoding="utf-8")
+    return 0 if result.ok else 1
+
+
+def cmd_marks_digest(args) -> int:
+    from radar.marks import digest as _digest
+    site_url = args.site_url or _digest.site_url_for(args.repo_slug or "")
+    result = _digest.run(DataRoot.at(_repo(args) / "data"), pathlib.Path(args.out_dir), site_url=site_url,
+                         dry_run=args.dry_run, github_output=pathlib.Path(args.github_output) if args.github_output else None)
+    print(f"待阅读 {result.pending} 篇，新增 {result.new} 篇，已离开 {result.cleared} 篇。")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # radar site
 # ---------------------------------------------------------------------------
 
@@ -244,6 +334,44 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--max-age-hours", type=float, default=30.0)
     render.add_argument("--publish-conclusion", default="", help="result of the publish job, if any")
     render.set_defaults(func=cmd_alerts_render)
+
+    backfill = sub.add_parser("backfill", help="one backfill run per calendar month of a date range")
+    backfill.add_argument("--from", dest="from_date", required=True, help="YYYY-MM-DD inclusive")
+    backfill.add_argument("--to", dest="to_date", required=True, help="YYYY-MM-DD inclusive")
+    backfill.add_argument("--sources", default="arxiv,openalex,pubmed")
+    backfill.add_argument("--dry-run", action="store_true", help="fetch and route only, write under .radar-dryrun/")
+    backfill.add_argument("--out", help="dry-run output directory")
+    backfill.set_defaults(func=cmd_backfill)
+
+    rescore = sub.add_parser("rescore", help="re-score papers whose newest verdict failed, as a new run")
+    rescore.add_argument("--limit", type=int, help="attempt at most this many")
+    rescore.add_argument("--dry-run", action="store_true", help="count candidates only")
+    rescore.set_defaults(func=cmd_rescore)
+
+    rnd = sub.add_parser("random-reading", help="random reading for past run-days (gaps or top-up)")
+    rnd.add_argument("--days", type=int, help="how many days back from yesterday")
+    rnd.add_argument("--from", dest="from_date", help="YYYY-MM-DD")
+    rnd.add_argument("--to", dest="to_date", help="YYYY-MM-DD")
+    rnd.add_argument("--top-up", action="store_true", help="draw only the shortfall for days that already have a file")
+    rnd.add_argument("--dry-run", action="store_true", help="pick and report, score nothing, write nothing")
+    rnd.set_defaults(func=cmd_random_reading)
+
+    marks = sub.add_parser("marks", help="reading marks: issue sync and the 待读 digest")
+    marks_sub = marks.add_subparsers(dest="marks_command", required=True)
+    apply_p = marks_sub.add_parser("apply", help="validate a pasted marks payload and write its device file")
+    src = apply_p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--body-env", help="environment variable holding the issue body")
+    src.add_argument("--body-file", help="file holding the issue body")
+    apply_p.add_argument("--dry-run", action="store_true")
+    apply_p.add_argument("--summary-file", help="write the human-readable result here too")
+    apply_p.set_defaults(func=cmd_marks_apply)
+    digest_p = marks_sub.add_parser("digest", help="render digest-body.md and, when there is news, digest-comment.md")
+    digest_p.add_argument("--out-dir", required=True)
+    digest_p.add_argument("--dry-run", action="store_true", help="render but leave the watermark alone")
+    digest_p.add_argument("--github-output")
+    digest_p.add_argument("--repo", dest="repo_slug", default="", help="owner/name, for links to the site")
+    digest_p.add_argument("--site-url", default="")
+    digest_p.set_defaults(func=cmd_marks_digest)
 
     site = sub.add_parser("site", help="the static site")
     site_sub = site.add_subparsers(dest="site_command", required=True)

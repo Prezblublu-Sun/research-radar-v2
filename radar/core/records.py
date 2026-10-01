@@ -27,9 +27,24 @@ def utc_now_iso(now: dt.datetime | None = None) -> str:
             .replace("+00:00", "Z"))
 
 
+_last_run_id = ""
+
+
 def new_run_id(now: dt.datetime | None = None) -> str:
-    """``2026-10-02T121703Z`` — sorts chronologically, safe in a filename."""
-    return (now or utc_now()).strftime("%Y-%m-%dT%H%M%SZ")
+    """``2026-10-02T121703Z`` — sorts chronologically, safe in a filename.
+
+    Strictly increasing within a process: a backfill creates one run per
+    month in quick succession and two runs may never share an id.
+    """
+    global _last_run_id
+    stamp = now or utc_now()
+    candidate = stamp.strftime("%Y-%m-%dT%H%M%SZ")
+    if now is None and candidate <= _last_run_id:
+        last = dt.datetime.strptime(_last_run_id, "%Y-%m-%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+        candidate = (last + dt.timedelta(seconds=1)).strftime("%Y-%m-%dT%H%M%SZ")
+    if now is None:
+        _last_run_id = candidate
+    return candidate
 
 
 def is_run_id(text: str) -> bool:

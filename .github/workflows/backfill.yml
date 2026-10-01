@@ -1,0 +1,104 @@
+name: backfill
+
+# Manually-triggered historical backfill: one `backfill` run per calendar
+# month of the range, through the ordinary pipeline. Resumable: a month
+# whose run already exists is skipped, so re-dispatch the same range after
+# a stop. Start with dry_run to see volumes before spending anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_date:
+        description: "Start of range (YYYY-MM-DD, inclusive)"
+        required: true
+        type: string
+      to_date:
+        description: "End of range (YYYY-MM-DD, inclusive)"
+        required: true
+        type: string
+      sources:
+        description: "Comma-separated sources: arxiv,openalex,pubmed"
+        required: true
+        type: string
+        default: "arxiv,openalex,pubmed"
+      dry_run:
+        description: "Fetch and route only; score nothing, commit nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: radar-writer
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    outputs:
+      committed: ${{ steps.commit.outputs.committed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Backfill
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          MODEL_NAME: ${{ vars.MODEL_NAME }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          OPENALEX_EMAIL: ${{ vars.OPENALEX_EMAIL }}
+          PUBMED_EMAIL: ${{ vars.PUBMED_EMAIL }}
+          SCORER_PROMPT_FILE: scorer_v4.txt
+        run: |
+          radar backfill --from "${{ inputs.from_date }}" --to "${{ inputs.to_date }}" \
+            --sources "${{ inputs.sources }}" ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Commit the backfilled months
+        id: commit
+        # Also after a failed month: every completed month is already a run
+        # file, and the next dispatch of the same range resumes.
+        if: ${{ !cancelled() && !inputs.dry_run }}
+        run: |
+          git config user.name "research-radar-bot"
+          git config user.email "actions@github.com"
+          git add data/runs data/aliases 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "Nothing new to commit."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "backfill: ${{ inputs.from_date }}..${{ inputs.to_date }}"
+          bash scripts/git_push_retry.sh main 5
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload scorer failure dumps
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-failures-${{ github.run_id }}
+          path: .radar-cache/llm_failures/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    needs: [run]
+    if: ${{ !cancelled() && needs.run.outputs.committed == 'true' }}
+    uses: ./.github/workflows/pages-build.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

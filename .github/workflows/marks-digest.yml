@@ -1,0 +1,118 @@
+name: marks-digest
+
+# Mail the owner the papers they marked 待阅读, through GitHub's own
+# notifications: one standing issue whose body is rewritten every run
+# (silent) and which gets a comment only when papers appeared since the
+# last run (that comment is the mail). Nothing new means no comment.
+
+on:
+  schedule:
+    # 06:30 UTC — the list is waiting when the reader starts the day.
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Render the digest and print it, but touch no issue"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: radar-writer
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      LABEL: marks-digest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Build the digest
+        id: build
+        run: |
+          radar marks digest \
+            --out-dir "$RUNNER_TEMP/digest" \
+            --repo "${{ github.repository }}" \
+            --github-output "$GITHUB_OUTPUT" \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Show it in the run summary
+        run: |
+          {
+            echo "### 待阅读摘要"
+            echo
+            cat "$RUNNER_TEMP/digest/digest-body.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Find or open the standing issue
+        id: issue
+        if: ${{ !inputs.dry_run }}
+        run: |
+          number="$(gh issue list --label "$LABEL" --state open \
+                      --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -z "$number" ]; then
+            if [ "${{ steps.build.outputs.pending_count }}" = "0" ]; then
+              echo "Nothing marked 待阅读 and no open digest issue: nothing to do."
+              echo "number=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            gh label create "$LABEL" --color 1D76DB \
+              --description "自动维护的待阅读摘要" 2>/dev/null || true
+            number="$(gh issue create \
+              --title "待阅读清单" \
+              --label "$LABEL" \
+              --assignee "${{ github.repository_owner }}" \
+              --body-file "$RUNNER_TEMP/digest/digest-body.md" \
+              | grep -o '[0-9]*$')"
+            echo "Opened issue #$number."
+            # The creation mail already carries the list; do not double up.
+            rm -f "$RUNNER_TEMP/digest/digest-comment.md"
+          else
+            gh issue edit "$number" --body-file "$RUNNER_TEMP/digest/digest-body.md"
+            echo "Refreshed issue #$number."
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Comment when there is something new
+        if: ${{ !inputs.dry_run && steps.issue.outputs.number != '' }}
+        run: |
+          if [ -f "$RUNNER_TEMP/digest/digest-comment.md" ]; then
+            gh issue comment "${{ steps.issue.outputs.number }}" \
+              --body-file "$RUNNER_TEMP/digest/digest-comment.md"
+            echo "Commented ${{ steps.build.outputs.new_count }} new paper(s)."
+          else
+            echo "Nothing new since the last digest; no comment, no mail."
+          fi
+
+      # Last, and only if everything above worked: an uncommitted watermark
+      # means the next run reports the same papers again, which is the
+      # failure worth having.
+      - name: Remember what was reported
+        if: ${{ !cancelled() && !inputs.dry_run }}
+        run: |
+          git config user.name "research-radar-bot"
+          git config user.email "actions@github.com"
+          git add data/digest/ 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "Digest state unchanged."
+          else
+            git commit -m "digest: 待阅读 ${{ steps.build.outputs.pending_count }} 篇（新增 ${{ steps.build.outputs.new_count }}）"
+            bash scripts/git_push_retry.sh main 5
+          fi

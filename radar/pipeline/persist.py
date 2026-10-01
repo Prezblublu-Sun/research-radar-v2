@@ -15,6 +15,16 @@ from radar.core.records import (ABSTRACT_MAX_CHARS, RECORD_DROPPED_KEYS,
 from radar.pipeline.router import crossovers
 
 
+RECORD_META_KEYS = ("ck", "kind", "schema_version", "run_id", "run_type", "scored_at",
+                    "scorer_version", "prompt_sha", "crossover", "provenance", "runs", "first_run_id")
+
+
+def strip_record_meta(record: dict) -> dict:
+    """A stored (or merged) record back to the pipeline's paper shape, so it
+    can be re-scored and written into a new run."""
+    return {k: v for k, v in record.items() if k not in RECORD_META_KEYS}
+
+
 def build_paper_record(paper: dict, ctx, *, aliases: dict | None = None,
                        scored_at: str | None = None,
                        provenance: dict | None = None) -> dict:

@@ -1,0 +1,84 @@
+name: rescore
+
+# Manually-triggered re-score of papers whose newest verdict is a scorer
+# failure. Writes one `rescore` run; the newer verdict wins at read time.
+# Re-dispatch until the candidate count reaches 0.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max papers to attempt in this run"
+        required: true
+        type: string
+        default: "800"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: radar-writer
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    outputs:
+      committed: ${{ steps.commit.outputs.committed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Rescore
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          MODEL_NAME: ${{ vars.MODEL_NAME }}
+          SCORER_PROMPT_FILE: scorer_v4.txt
+        run: radar rescore --limit "${{ inputs.limit }}"
+
+      - name: Commit the rescore run
+        id: commit
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.name "research-radar-bot"
+          git config user.email "actions@github.com"
+          git add data/runs 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No rescore run to commit (no candidates)."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "rescore: up to ${{ inputs.limit }} failed verdicts"
+          bash scripts/git_push_retry.sh main 5
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload scorer failure dumps
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-failures-${{ github.run_id }}
+          path: .radar-cache/llm_failures/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  publish:
+    needs: [run]
+    if: ${{ !cancelled() && needs.run.outputs.committed == 'true' }}
+    uses: ./.github/workflows/pages-build.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

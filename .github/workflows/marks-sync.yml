@@ -1,0 +1,87 @@
+name: marks-sync
+
+# Commit reading marks that the browser hands over through an issue.
+#
+# The site is a static Pages artifact and holds no credential, so the
+# library page packages the marks and opens a pre-filled issue, which the
+# reader submits with their own GitHub session. This job is the server half.
+#
+# Trust: the job runs only for an issue the repository owner opened and
+# labelled `marks-sync`, and the body is passed to the validator through an
+# environment variable — never interpolated into a shell command.
+
+on:
+  issues:
+    # `opened` only: the library page's link always carries ?labels=marks-sync,
+    # and listening for `labeled` too ran the job twice per submission.
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: radar-writer
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      github.event.issue.user.login == github.repository_owner &&
+      contains(github.event.issue.labels.*.name, 'marks-sync') &&
+      github.event.issue.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Apply the pasted marks
+        id: apply
+        continue-on-error: true
+        env:
+          # Never inline ${{ github.event.issue.body }} into a run: block.
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          radar marks apply --body-env ISSUE_BODY --summary-file "$RUNNER_TEMP/marks-summary.md"
+
+      - name: Commit the synced marks
+        if: ${{ !cancelled() && steps.apply.outcome == 'success' }}
+        run: |
+          git config user.name "research-radar-bot"
+          git config user.email "actions@github.com"
+          git add data/marks/ 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No change from this sync (marks already up to date)."
+          else
+            git commit -m "marks: sync from issue #${{ github.event.issue.number }}"
+            bash scripts/git_push_retry.sh main 5
+          fi
+
+      - name: Report back on the issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTCOME: ${{ steps.apply.outcome }}
+        run: |
+          summary="$(cat "$RUNNER_TEMP/marks-summary.md" 2>/dev/null || echo '同步任务没有产生结果。')"
+          if [ "$OUTCOME" = "success" ]; then
+            printf '%s\n' "$summary" | gh issue comment "${{ github.event.issue.number }}" --body-file -
+            gh issue close "${{ github.event.issue.number }}" --reason completed
+          else
+            printf '%s\n\n请修正后重新提交。\n' "$summary" \
+              | gh issue comment "${{ github.event.issue.number }}" --body-file -
+          fi
+
+      - name: Fail the run when the payload was rejected
+        if: steps.apply.outcome != 'success'
+        run: exit 1

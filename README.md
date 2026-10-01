@@ -31,12 +31,22 @@ radar daily                                    # needs OPENAI_API_KEY (DeepSeek)
 radar health --max-age-hours 6                 # the workflow's health gate on the newest run
 radar site build --out _site                   # the static site from data/ (add --data .radar-dryrun/data to preview a dry run)
 radar alerts render --job run --conclusion failure --out-dir /tmp/alert   # what the alert issue would say
+radar backfill --from 2026-06-01 --to 2026-06-30 --dry-run   # one backfill run per calendar month
+radar rescore --dry-run                        # papers whose newest verdict failed → a new rescore run
+radar random-reading --days 7 --dry-run        # random reading for past run-days (gaps, or --top-up)
+radar marks digest --out-dir /tmp/digest --dry-run           # the 待读 digest the standing issue shows
 ```
 
 In Actions, `daily.yml` runs at 12:17 UTC: it commits the run log even when a
 later step fails, evaluates the health gate, and the `alert` job keeps one
 standing issue labelled `radar-alerts` up to date, commenting (which sends
 the email) only when the run failed or the gate blocked.
+
+Writer workflows: `daily.yml` (cron), `backfill.yml`, `rescore.yml`,
+`random-reading.yml` (dispatch), `marks-sync.yml` (an issue from the library
+page), `marks-digest.yml` (cron). Each commits its own paths, pushes through
+the retry script, and the data writers publish the site through
+`pages-build.yml`.
 
 A dry run writes under `.radar-dryrun/` and prints the per-direction routing
 table. A real run appends one file, `data/runs/YYYY/<run_id>-daily.jsonl`:

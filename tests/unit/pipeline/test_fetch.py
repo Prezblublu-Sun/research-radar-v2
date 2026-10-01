@@ -12,7 +12,7 @@ def test_effective_lookbacks_apply_floors(make_ctx, stub_fetchers, paper_factory
     assert fetchers.calls["arxiv"]["days_back"] == fetch.ARXIV_MIN_LOOKBACK_DAYS
     assert fetchers.calls["openalex"]["days_back"] == fetch.OPENALEX_MIN_LOOKBACK_DAYS
     assert fetchers.calls["pubmed"]["days_back"] == 2
-    assert result.window == {"requested_days_back": 2, "arxiv": fetch.ARXIV_MIN_LOOKBACK_DAYS,
+    assert result.window == {"mode": "daily", "requested_days_back": 2, "arxiv": fetch.ARXIV_MIN_LOOKBACK_DAYS,
                              "openalex": fetch.OPENALEX_MIN_LOOKBACK_DAYS, "pubmed": 2}
     assert result.fetched_total == 3
     assert result.source_counts == {"arxiv": 1, "openalex": 1, "pubmed": 1}

@@ -57,6 +57,14 @@ class RunContext:
     git_commit: str = ""
     dry_run: bool = False
     offline: bool = False   # no network beyond the injected fetchers (no Zenodo lookups)
+    # Historical window (backfill): when both are set the fetchers are asked
+    # for this inclusive date range instead of a lookback from today.
+    window_from: str = ""
+    window_to: str = ""
+
+    @property
+    def historical(self) -> bool:
+        return bool(self.window_from and self.window_to)
 
     @property
     def today_iso(self) -> str:
