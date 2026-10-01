@@ -1,0 +1,7 @@
+# Hashes of prompts and fixtures are pinned in tests; line endings must not
+# depend on the checkout platform.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
