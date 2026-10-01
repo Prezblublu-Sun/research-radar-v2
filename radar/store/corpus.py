@@ -122,7 +122,7 @@ def load_corpus(root: DataRoot) -> Corpus:
     buckets: dict[str, list[dict]] = {}
     for paper in papers:
         buckets.setdefault(bucket_date(paper), []).append(paper)
-    headers.sort(key=lambda h: str(h.get("run_id") or ""), reverse=True)
+    headers.sort(key=_runs.run_order, reverse=True)
     stats = CorpusStats(raw_total=raw_total, unique_total=len(papers),
                         duplicates_suppressed=raw_total - len(papers),
                         priority_counts=priority_counts(papers))

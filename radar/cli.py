@@ -101,18 +101,13 @@ def cmd_health(args) -> int:
     from radar.store import runs as _runs
 
     root = DataRoot.at(_repo(args) / "data")
-    files = _runs.list_runs(root)
+    ordered = _runs.headers_newest_first(root)
     if args.run_id:
-        files = [p for p in files if p.name.startswith(args.run_id)]
-    if not files:
+        ordered = [(p, h) for p, h in ordered if p.name.startswith(args.run_id)]
+    if not ordered:
         print("::error::no run log found" + (f" for {args.run_id}" if args.run_id else ""))
         return 1
-    path = files[-1]
-    try:
-        header = _runs.read_header(path)
-    except Exception as error:  # noqa: BLE001
-        print(f"::error::{path.name} is not a readable run log: {error}")
-        return 1
+    path, header = ordered[0]
     verdict = _health.evaluate(header)
     if args.max_age_hours is not None:
         stamp = header.get("finished_at") or ""
@@ -239,6 +234,23 @@ def cmd_marks_digest(args) -> int:
     result = _digest.run(DataRoot.at(_repo(args) / "data"), pathlib.Path(args.out_dir), site_url=site_url,
                          dry_run=args.dry_run, github_output=pathlib.Path(args.github_output) if args.github_output else None)
     print(f"待阅读 {result.pending} 篇，新增 {result.new} 篇，已离开 {result.cleared} 篇。")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# radar import-v1
+# ---------------------------------------------------------------------------
+
+def cmd_import_v1(args) -> int:
+    from radar.importer import v1 as _v1
+    repo = _repo(args)
+    cfg = _config.load(repo / "config" / "directions.yaml")
+    root = DataRoot.at(pathlib.Path(args.out).resolve() / "data") if args.out else DataRoot.at(repo / "data")
+    picks = pathlib.Path(args.picks) if args.picks else repo / "tests" / "fixtures" / "eval" / "picks.jsonl"
+    report = _v1.run_import(pathlib.Path(args.old_repo), root, cfg, prompts_dir=repo / "prompts",
+                            priorities=set(args.priorities), picks_path=picks if picks.exists() else None,
+                            dry_run=args.dry_run)
+    print(json.dumps(report.__dict__, ensure_ascii=False, indent=1))
     return 0
 
 
@@ -402,6 +414,14 @@ def build_parser() -> argparse.ArgumentParser:
     digest_p.add_argument("--repo", dest="repo_slug", default="", help="owner/name, for links to the site")
     digest_p.add_argument("--site-url", default="")
     digest_p.set_defaults(func=cmd_marks_digest)
+
+    imp = sub.add_parser("import-v1", help="one-off import of the v1 radar's High/Medium papers, picks and visuals")
+    imp.add_argument("old_repo", help="checkout of Prezblublu-Sun/research-radar (sparse: data/daily, data/visuals)")
+    imp.add_argument("--priorities", nargs="+", default=["High", "Medium"])
+    imp.add_argument("--picks", help="picks fixture JSONL (default: tests/fixtures/eval/picks.jsonl)")
+    imp.add_argument("--dry-run", action="store_true", help="count and report, write nothing")
+    imp.add_argument("--out", help="write under this directory instead of the repo's data/")
+    imp.set_defaults(func=cmd_import_v1)
 
     visuals = sub.add_parser("visuals", help="licence-safe figure previews for cards")
     visuals_sub = visuals.add_subparsers(dest="visuals_command", required=True)

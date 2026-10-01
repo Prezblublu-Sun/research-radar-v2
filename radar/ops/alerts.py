@@ -46,17 +46,16 @@ def plain(value, limit: int = 160) -> str:
 
 
 def recent_headers(root: DataRoot, limit: int = RECENT_RUNS) -> list[dict]:
-    """Newest first; unreadable files are reported as a pseudo-header."""
+    """Newest finished first; an unreadable file is reported as a pseudo-header."""
     headers: list[dict] = []
-    for path in reversed(_runs.list_runs(root)):
+    for path in _runs.list_runs(root):
         try:
             headers.append(_runs.read_header(path))
         except Exception as error:  # noqa: BLE001
-            headers.append({"run_id": path.stem, "run_status": "unreadable",
+            headers.append({"run_id": path.stem, "run_status": "unreadable", "finished_at": "9999",
                             "quality_flags": [f"unreadable: {type(error).__name__}"], "counts": {}})
-        if len(headers) >= limit:
-            break
-    return headers
+    headers.sort(key=_runs.run_order, reverse=True)
+    return headers[:limit]
 
 
 def _age_hours(header: dict, now: dt.datetime) -> float | None:

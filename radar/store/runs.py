@@ -18,6 +18,33 @@ def list_runs(root: DataRoot) -> list[pathlib.Path]:
     return sorted(root.runs.rglob("*.jsonl"))
 
 
+def run_order(header: dict) -> tuple[str, bool, str]:
+    """Newest-run ordering key: when the run finished, then its id.
+
+    Filenames are not the order — the v1 import lives under
+    ``runs/import-v1/`` and sorts after every dated year directory — and on
+    a tie the import, the oldest evidence by construction, loses.
+    """
+    return (str(header.get("finished_at") or header.get("started_at") or ""),
+            header.get("run_type") != "import_v1", str(header.get("run_id") or ""))
+
+
+def headers_newest_first(root: DataRoot, *, run_types: set[str] | None = None,
+                         limit: int | None = None) -> list[tuple[pathlib.Path, dict]]:
+    """``[(path, header)]`` for every readable run log, newest finished first."""
+    found: list[tuple[pathlib.Path, dict]] = []
+    for path in list_runs(root):
+        try:
+            header = read_header(path)
+        except Exception:  # noqa: BLE001 — one bad file must not hide the rest
+            continue
+        if run_types is not None and header.get("run_type") not in run_types:
+            continue
+        found.append((path, header))
+    found.sort(key=lambda item: run_order(item[1]), reverse=True)
+    return found[:limit] if limit else found
+
+
 def read_header(path: pathlib.Path) -> dict:
     with open(path, "r", encoding="utf-8") as handle:
         first = handle.readline()
