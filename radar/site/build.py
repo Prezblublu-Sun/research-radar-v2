@@ -76,6 +76,13 @@ def build_site(data_root: DataRoot, out: pathlib.Path, config, *, repo: str = ""
     report.unique_total = corpus.stats.unique_total
     log(f"corpus: {corpus.stats.unique_total} unique / {corpus.stats.raw_total} raw records, "
         f"{len(corpus.buckets)} publication dates, {len(corpus.headers)} runs")
+    if visuals is None:
+        from radar.store import visuals as _vstore
+        from radar.visuals import public as _vpublic
+        registry = _vstore.latest_visuals(data_root)
+        visuals = _vpublic.safe_registry(registry)
+        if registry:
+            log(f"visuals: {len(visuals)} safe figure(s) of {len(registry)} registry records")
 
     # day pages + shards
     dates = sorted(corpus.buckets)

@@ -243,6 +243,36 @@ def cmd_marks_digest(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# radar visuals
+# ---------------------------------------------------------------------------
+
+def cmd_visuals_enrich(args) -> int:
+    from radar.core.records import new_run_id
+    from radar.store import corpus as _corpus
+    from radar.store import visuals as _vstore
+    from radar.visuals import enrich as _enrich
+    if args.limit < 1 or args.timeout <= 0 or args.min_delay < 0:
+        print("::error::--limit >= 1, --timeout > 0 and --min-delay >= 0")
+        return 2
+    root = DataRoot.at(_repo(args) / "data")
+    corpus = _corpus.load_corpus(root)
+    registry = _vstore.latest_visuals(root)
+    candidates = _enrich.candidates_from_corpus(corpus.papers, set(args.priorities),
+                                                set(args.identity) if args.identity else None)
+    resolver = _enrich.VisualResolver(_enrich.HttpClient(timeout=args.timeout, min_delay=args.min_delay),
+                                      email=args.email)
+    result = _enrich.enrich(candidates=candidates, registry=registry, resolver=resolver,
+                            limit=args.limit, force=args.force)
+    summary = {"candidates": len(candidates), "registry_records": len(registry),
+               "attempted": result["attempted"], "counts": result["counts"], "changed": len(result["changed"])}
+    if result["changed"] and not args.no_write:
+        path = _vstore.append_visuals_run(root, new_run_id(), result["changed"])
+        summary["path"] = str(path)
+    print(json.dumps(summary, ensure_ascii=False, indent=1))
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # radar site
 # ---------------------------------------------------------------------------
 
@@ -372,6 +402,19 @@ def build_parser() -> argparse.ArgumentParser:
     digest_p.add_argument("--repo", dest="repo_slug", default="", help="owner/name, for links to the site")
     digest_p.add_argument("--site-url", default="")
     digest_p.set_defaults(func=cmd_marks_digest)
+
+    visuals = sub.add_parser("visuals", help="licence-safe figure previews for cards")
+    visuals_sub = visuals.add_subparsers(dest="visuals_command", required=True)
+    enrich_p = visuals_sub.add_parser("enrich", help="resolve figures for stale/new High+Medium papers; append one file")
+    enrich_p.add_argument("--limit", type=int, default=20)
+    enrich_p.add_argument("--priorities", nargs="+", default=["High", "Medium"], choices=["High", "Medium", "Low", "Exclude"])
+    enrich_p.add_argument("--identity", action="append", help="exact doi:/arxiv: key (repeatable)")
+    enrich_p.add_argument("--timeout", type=float, default=12.0)
+    enrich_p.add_argument("--min-delay", type=float, default=0.5)
+    enrich_p.add_argument("--force", action="store_true")
+    enrich_p.add_argument("--no-write", action="store_true", help="resolve but append nothing")
+    enrich_p.add_argument("--email", default=os.environ.get("PUBMED_EMAIL", ""), help="contact email for the PMC ID converter")
+    enrich_p.set_defaults(func=cmd_visuals_enrich)
 
     site = sub.add_parser("site", help="the static site")
     site_sub = site.add_subparsers(dest="site_command", required=True)

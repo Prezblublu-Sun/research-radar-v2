@@ -115,6 +115,31 @@ def test_status_page_lists_the_run(built):
     assert report.header["run_id"] in html and "scorer_v4.txt" in html
 
 
+def test_safe_visuals_from_the_stream_reach_the_day_shards(tmp_path, make_ctx, stub_fetchers, sample_records, data_root, cfg):
+    from radar.store import visuals as vstore
+    by_source = {"arxiv": [], "openalex": [], "pubmed": []}
+    for r in sample_records:
+        by_source[r["source"]].append(r)
+    ctx = make_ctx(stub_fetchers(**by_source), scorer=ReplayScorer({}, default={"priority": "High"}))
+    report = daily.run_daily(ctx, log=lambda *_: None)
+    from radar.core import identity
+    target = next(p for p in report.papers if p.get("source") == "arxiv")
+    key = identity.identity_key(target)
+    good = {"status": "available", "checked_at": "2026-10-01T00:00:00Z", "provider": "arxiv", "license": "CC BY 4.0",
+            "image_url": "https://arxiv.org/html/2601.00001v1/x1.png", "source_url": "https://arxiv.org/abs/2601.00001v1",
+            "caption": "Figure 1: the mesh.", "width": 640, "height": 480, "media_type": "image/png"}
+    unsafe = dict(good, caption="Figure 2: reproduced with permission from X.")
+    vstore.append_visuals_run(data_root, "2026-10-01T130000Z", {key: good, "doi:10.1/other": unsafe})
+    out = tmp_path / "_site"
+    build.build_site(data_root, out, cfg, log=lambda *_: None)
+    date = (target.get("date") or "")[:10]
+    page = json.loads((out / "data" / "day" / date / "page-1.json").read_text(encoding="utf-8"))
+    card = next(r for r in page["papers"] if r["identity_key"] == key)
+    assert card["visual"]["image_url"] == good["image_url"] and card["visual"]["license"] == "CC BY 4.0"
+    assert "provider" not in card["visual"] or card["visual"].get("provider") == "mdpi"
+    assert all("visual" not in r for r in page["papers"] if r["identity_key"] != key)
+
+
 def test_validate_catches_a_missing_index(tmp_path):
     assert build.validate(tmp_path) == ["index.html is missing"]
 

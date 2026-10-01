@@ -1,0 +1,118 @@
+name: visuals-backfill
+
+# Manually-triggered figure discovery over the High/Medium queue, in
+# checkpointed batches. Each batch that found anything appends one file to
+# data/visuals/ and commits it, so a cancelled run keeps what it paid for.
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Priority queue to backfill
+        required: true
+        type: choice
+        options: [High, Medium, High+Medium]
+        default: High
+      limit:
+        description: Papers to check per batch (1-500)
+        required: true
+        type: number
+        default: 100
+      batches:
+        description: Checkpoint batches to run sequentially (1-3)
+        required: true
+        type: number
+        default: 1
+      identity:
+        description: "Optional exact doi: or arxiv: identity to refresh"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: radar-writer
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      committed: ${{ steps.loop.outputs.committed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Discover open-licence card visuals
+        id: loop
+        if: ${{ !cancelled() }}
+        env:
+          PUBMED_EMAIL: ${{ vars.PUBMED_EMAIL }}
+          VISUAL_LIMIT: ${{ inputs.limit }}
+          VISUAL_SCOPE: ${{ inputs.scope }}
+          VISUAL_BATCHES: ${{ inputs.batches }}
+          VISUAL_IDENTITY: ${{ inputs.identity }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$VISUAL_LIMIT" =~ ^[0-9]+$ ]] || [ "$VISUAL_LIMIT" -lt 1 ] || [ "$VISUAL_LIMIT" -gt 500 ]; then
+            echo "::error::limit must be an integer from 1 to 500"; exit 2
+          fi
+          if ! [[ "$VISUAL_BATCHES" =~ ^[0-9]+$ ]] || [ "$VISUAL_BATCHES" -lt 1 ] || [ "$VISUAL_BATCHES" -gt 3 ]; then
+            echo "::error::batches must be an integer from 1 to 3"; exit 2
+          fi
+          case "$VISUAL_SCOPE" in
+            High) priorities="High" ;;
+            Medium) priorities="Medium" ;;
+            High+Medium) priorities="High Medium" ;;
+            *) echo "::error::unsupported visual scope: $VISUAL_SCOPE"; exit 2 ;;
+          esac
+          identity_args=()
+          if [ -n "$VISUAL_IDENTITY" ]; then
+            if ! [[ "$VISUAL_IDENTITY" =~ ^(doi|arxiv):[^[:space:]]+$ ]]; then
+              echo "::error::identity must be an exact doi: or arxiv: key without whitespace"; exit 2
+            fi
+            identity_args=(--identity "$VISUAL_IDENTITY")
+          fi
+          git config user.name "research-radar-bot"
+          git config user.email "actions@github.com"
+          committed=false
+          for ((batch = 1; batch <= VISUAL_BATCHES; batch++)); do
+            echo "::group::Visual checkpoint $batch/$VISUAL_BATCHES"
+            # shellcheck disable=SC2086
+            radar visuals enrich --limit "$VISUAL_LIMIT" --priorities $priorities "${identity_args[@]}"
+            git add data/visuals 2>/dev/null || true
+            if git diff --staged --quiet; then
+              echo "No further eligible records; stopping early."
+              echo "::endgroup::"
+              break
+            fi
+            git commit -m "visuals: enrich open-licence paper figures"
+            bash scripts/git_push_retry.sh main 5
+            committed=true
+            echo "::endgroup::"
+          done
+          echo "committed=$committed" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: [run]
+    if: ${{ !cancelled() && needs.run.outputs.committed == 'true' }}
+    uses: ./.github/workflows/pages-build.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
