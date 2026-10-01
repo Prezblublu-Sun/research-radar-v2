@@ -251,7 +251,9 @@ directions:
         - "C189216461"   # Topology optimization
         - "C135252773"   # Inverse problem
       openalex_keywords: ["surrogate-assisted optimization", "inverse design implant", "topology optimization implant", "digital twin finite element", "reinforcement learning finite element"]
-      pubmed_terms: ["implant design optimization", "patient-specific implant design"]
+      # PubMed terms are sent as exact "phrase"[Title/Abstract] queries, so they must be
+      # short phrases that actually occur verbatim (measured 2026-10-01, hits/30 days).
+      pubmed_terms: ["implant design", "surrogate model", "topology optimization"]   # 45 / 31 / ~20
     strong_keywords:
       - "Bayesian optimization"
       - "multi-objective optimization"
@@ -320,7 +322,28 @@ directions:
         - "C26796778"    # Selective laser melting
         - "C2781411149"  # Implant
       openalex_keywords: ["femoral stem finite element", "short stem primary stability", "stress shielding remodeling", "TPMS implant", "porous titanium implant fatigue"]
-      pubmed_terms: ["femoral stem finite element", "short stem hip arthroplasty biomechanics", "stress shielding femoral", "porous titanium implant osseointegration", "patient-specific finite element hip"]
+      # Exact-phrase Title/Abstract terms; the seven long phrases used before returned 1 hit
+      # in 30 days combined. Hits/30 days measured 2026-10-01 in brackets.
+      pubmed_terms:
+        - "femoral stem"                      # 7
+        - "short stem"                        # 3
+        - "femoral component"                 # 13
+        - "stress shielding"                  # 6
+        - "micromotion"                       # 5
+        - "primary stability"                 # 15
+        - "osseointegration"                  # 98
+        - "bone-implant interface"            # 5
+        - "bone remodeling"                   # 133
+        - "bone remodelling"                  # 20
+        - "patient-specific finite element"   # 7
+        - "subject-specific finite element"   # 6
+        - "finite element analysis"           # 159 — biomedical FE; the router keeps only what pairs with our terms
+        - "porous titanium"                   # 11
+        - "bone scaffold"                     # 5
+        - "gyroid"                            # 14
+        - "triply periodic minimal surface"   # 6
+        - "laser powder bed fusion"           # 17
+        - "selective laser melting"           # 10
     strong_keywords:
       - "femoral stem"
       - "short stem"
