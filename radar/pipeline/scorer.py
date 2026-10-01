@@ -74,13 +74,14 @@ class ReplayScorer:
     """
     answers: dict[str, dict]
     key: str = "doi"
+    default: dict | None = None     # answer for papers not in the mapping
     version: str = "replay"
     budget_exhausted: str | None = None
 
     def score_batch(self, papers, config):
         raws = []
         for paper in papers:
-            answer = self.answers.get(str(paper.get(self.key) or ""))
+            answer = self.answers.get(str(paper.get(self.key) or ""), self.default)
             paper["llm"] = dict(answer) if answer is not None else {
                 **FAILED, "scorer_failed_reason": "no replay answer",
                 "scorer_failed_attempts": 0}

@@ -28,7 +28,14 @@ radar eval route                               # router recall on the 121 hand-p
 radar daily --dry-run --offline --fixture tests/fixtures/fetch/sample.jsonl
 radar daily --dry-run                          # real fetch, no scoring, no key needed
 radar daily                                    # needs OPENAI_API_KEY (DeepSeek)
+radar health --max-age-hours 6                 # the workflow's health gate on the newest run
+radar alerts render --job run --conclusion failure --out-dir /tmp/alert   # what the alert issue would say
 ```
+
+In Actions, `daily.yml` runs at 12:17 UTC: it commits the run log even when a
+later step fails, evaluates the health gate, and the `alert` job keeps one
+standing issue labelled `radar-alerts` up to date, commenting (which sends
+the email) only when the run failed or the gate blocked.
 
 A dry run writes under `.radar-dryrun/` and prints the per-direction routing
 table. A real run appends one file, `data/runs/YYYY/<run_id>-daily.jsonl`:

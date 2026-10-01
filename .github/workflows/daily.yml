@@ -1,0 +1,168 @@
+name: daily
+
+# The daily run: fetch → dedup → route → score → random reading → one
+# append-only run log. Commits whatever was written even when a later step
+# fails, then evaluates the health gate, then (Phase 3) publishes the site.
+# The alert job runs after everything and comments on the standing
+# radar-alerts issue only when something failed — that comment is the email.
+
+on:
+  schedule:
+    # 12:17 UTC = 20:17 Beijing. DeepSeek bills half price outside its peak
+    # windows (01:00-04:00 and 06:00-10:00 UTC, Mon-Fri); GitHub can delay a
+    # schedule by hours, and 12:17-17:17 UTC stays off-peak throughout. Off
+    # the top of the hour because :00 schedules queue the longest.
+    - cron: "17 12 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Requested lookback in days (per-source floors apply)"
+        default: "2"
+      dry_run:
+        description: "Fetch and route only; score nothing, commit nothing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  # Shared with every other job that commits to main.
+  group: radar-writer
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      committed: ${{ steps.commit.outputs.committed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # A queued writer must start after the previous writer's commit.
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Daily run
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          MODEL_NAME: ${{ vars.MODEL_NAME }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          OPENALEX_EMAIL: ${{ vars.OPENALEX_EMAIL }}
+          PUBMED_EMAIL: ${{ vars.PUBMED_EMAIL }}
+          SCORER_PROMPT_FILE: scorer_v4.txt
+        run: |
+          radar daily --days "${{ inputs.days || '2' }}" ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Commit run logs
+        id: commit
+        # Runs even when the daily run failed (a partial run still wrote its
+        # file), but never after a cancellation and never for a dry run.
+        if: ${{ !cancelled() && !inputs.dry_run }}
+        run: |
+          git config user.name "research-radar-bot"
+          git config user.email "actions@github.com"
+          git add data/runs data/random_reading data/aliases 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No run log to commit."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git commit -m "daily: $(date -u +%Y-%m-%d)"
+          bash scripts/git_push_retry.sh main 5
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Health gate
+        # Blocks only when today's data is missing or largely unscored; a
+        # single-source outage or a thin day is a warning and still publishes.
+        if: ${{ !cancelled() && !inputs.dry_run }}
+        run: radar health --max-age-hours 6
+
+      - name: Upload scorer failure dumps
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-failures-${{ github.run_id }}
+          path: .radar-cache/llm_failures/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # publish: added in Phase 3 (uses: ./.github/workflows/pages-build.yml,
+  # if: !cancelled() && needs.run.outputs.committed == 'true').
+
+  alert:
+    needs: [run]
+    if: ${{ always() && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      LABEL: radar-alerts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Render the alert
+        id: render
+        run: |
+          radar alerts render \
+            --job run \
+            --conclusion "${{ needs.run.result }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --out-dir "$RUNNER_TEMP/alert" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Find or open the standing issue
+        id: issue
+        run: |
+          number="$(gh issue list --label "$LABEL" --state open \
+                      --limit 1 --json number --jq '.[0].number // empty')"
+          if [ -z "$number" ]; then
+            # Self-healing: the label may not exist yet on a fresh repository.
+            gh label create "$LABEL" --color B60205 \
+              --description "自动维护的运行报警" 2>/dev/null || true
+            number="$(gh issue create \
+              --title "Radar 运行报警" \
+              --label "$LABEL" \
+              --assignee "${{ github.repository_owner }}" \
+              --body-file "$RUNNER_TEMP/alert/alert-body.md" \
+              | grep -o '[0-9]*$')"
+            echo "Opened issue #$number."
+            # The creation mail already carries the state; do not double up.
+            rm -f "$RUNNER_TEMP/alert/alert-comment.md"
+          else
+            gh issue edit "$number" --body-file "$RUNNER_TEMP/alert/alert-body.md"
+            echo "Refreshed issue #$number."
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Comment when something failed
+        if: ${{ steps.render.outputs.alert == 'true' }}
+        run: |
+          if [ -f "$RUNNER_TEMP/alert/alert-comment.md" ]; then
+            gh issue comment "${{ steps.issue.outputs.number }}" \
+              --body-file "$RUNNER_TEMP/alert/alert-comment.md"
+            echo "Commented on issue #${{ steps.issue.outputs.number }}."
+          fi

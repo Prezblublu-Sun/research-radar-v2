@@ -16,7 +16,11 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Derived, never committed (ADR: append-only data, rebuilt views)
-.radar-cache/      # seen-key cache, LLM failure dumps — rebuildable from data/runs
-.radar-dryrun/     # `radar daily --dry-run` output
-_site/             # `radar site build` output; Pages builds it from data/
+# Derived, never committed (ADR-0001: append-only data, rebuilt views).
+# One pattern per line: git reads a trailing "# comment" as part of the pattern.
+# seen-key cache and LLM failure dumps — rebuildable from data/runs
+.radar-cache/
+# `radar daily --dry-run` output
+.radar-dryrun/
+# `radar site build` output; Pages builds it from data/
+_site/

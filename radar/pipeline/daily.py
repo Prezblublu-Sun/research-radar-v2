@@ -1,9 +1,8 @@
-"""The daily run: compose the stages, decide the verdict, write one file.
+"""The daily run: compose the stages, decide the verdict, write the files.
 
 Replaces v1's 436-line ``run()``. Each stage is a function with explicit
 inputs and outputs (see the sibling modules); this module only wires them
-and decides ``run_status`` / ``quality_flags``. The random-reading stage is
-wired in by Phase 2 and until then is reported as disabled in the header.
+and decides ``run_status`` / ``quality_flags``.
 """
 from __future__ import annotations
 
@@ -16,6 +15,7 @@ from radar.pipeline import fetch as _fetch
 from radar.pipeline import health as _health
 from radar.pipeline import manifest as _manifest
 from radar.pipeline import persist as _persist
+from radar.pipeline import random_reading as _random
 from radar.pipeline import router as _router
 from radar.pipeline.context import RunContext
 from radar.sources import zenodo_aliases
@@ -29,8 +29,10 @@ class _Offline(Exception):
 @dataclass
 class RunReport:
     run_path: pathlib.Path | None
+    random_path: pathlib.Path | None
     header: dict
     papers: list[dict]
+    random_papers: list[dict]
     blocking: list[str]
     warnings: list[str]
 
@@ -57,6 +59,51 @@ def priority_counts(papers: list[dict]) -> tuple[dict[str, int], int]:
     return counts, failed
 
 
+def _resolve_aliases(ctx: RunContext, fetched, log) -> dict:
+    """Zenodo concept-DOI aliases; a lookup failure must not stall the run."""
+    alias_cache = ctx.data_root.aliases / "zenodo.json"
+    if ctx.offline:
+        return zenodo_aliases.flat(zenodo_aliases.load(alias_cache))
+    try:
+        aliases, report = zenodo_aliases.resolve_zenodo(
+            (p.get("doi") for lst in fetched.lists for p in lst), alias_cache)
+        if report["looked_up"]:
+            log(f"  Zenodo concept-DOI lookups: {report}")
+        return aliases
+    except Exception as error:  # noqa: BLE001
+        log(f"  ! DOI alias resolution skipped: {error}")
+        return {}
+
+
+def _random_stage(ctx: RunContext, scored, seen: SeenKeys, new_keys: set[str],
+                  fetched_total: int, raws: list[dict], log) -> tuple[list[dict], dict | None, dict]:
+    """Returns ``(picks, report_or_None, summary)``; never raises."""
+    if not ctx.random_reading:
+        return [], None, {"status": "disabled"}
+    if ctx.offline:
+        return [], None, {"status": "skipped_offline"}
+    if fetched_total == 0:
+        return [], None, {"status": "skipped_empty_run"}
+    if ctx.scorer.budget_exhausted:
+        return [], None, {"status": "skipped_budget_exhausted"}
+    try:
+        known = set(seen.keys) | set(new_keys) | _random.drawn_keys(ctx.data_root)
+        picks, report = _random.collect(scored, known, ctx.today_iso, ctx.config,
+                                        fetcher=ctx.fetchers.openalex)
+        log(f"Random reading: {len(report['journals'])} journal(s), {len(picks)} paper(s), "
+            f"{report['errors']} error(s)")
+        if picks:
+            picks, rr_raws = ctx.scorer.score_batch(picks, ctx.config)
+            raws.extend(rr_raws)
+        counts, failed = priority_counts(picks)
+        return picks, report, {"status": "ok", "journals": len(report["journals"]),
+                               "papers": len(picks), "errors": report["errors"],
+                               "priority_counts": counts, "scorer_failed": failed}
+    except Exception as error:  # noqa: BLE001 — serendipity must never fail the run
+        log(f"  ! random reading failed: {type(error).__name__}: {error}")
+        return [], None, {"status": "failed", "error": f"{type(error).__name__}: {error}"[:200]}
+
+
 def run_daily(ctx: RunContext, *, seen: SeenKeys | None = None, log=print) -> RunReport:
     started = utc_now_iso()
     log(f"[{ctx.run_id}] {ctx.run_type} run, today={ctx.today_iso}, days_back={ctx.days_back}"
@@ -72,22 +119,7 @@ def run_daily(ctx: RunContext, *, seen: SeenKeys | None = None, log=print) -> Ru
     if fetched.openalex_stats.get("truncated"):
         quality_flags.append("openalex_truncated")
 
-    # Zenodo aliases: a lookup failure must not stall the run.
-    aliases: dict = {}
-    alias_cache = ctx.data_root.aliases / "zenodo.json"
-    if ctx.offline:
-        aliases = zenodo_aliases.flat(zenodo_aliases.load(alias_cache))
-    try:
-        if ctx.offline:
-            raise _Offline
-        aliases, alias_report = zenodo_aliases.resolve_zenodo(
-            (p.get("doi") for lst in fetched.lists for p in lst), alias_cache)
-        if alias_report["looked_up"]:
-            log(f"  Zenodo concept-DOI lookups: {alias_report}")
-    except _Offline:
-        pass
-    except Exception as error:  # noqa: BLE001
-        log(f"  ! DOI alias resolution skipped: {error}")
+    aliases = _resolve_aliases(ctx, fetched, log)
 
     seen = seen or SeenKeys.load(ctx.data_root)
     log(f"Dedup against {len(seen)} known works" + (" (rebuilt)" if seen.rebuilt else ""))
@@ -108,11 +140,15 @@ def run_daily(ctx: RunContext, *, seen: SeenKeys | None = None, log=print) -> Ru
     scored, raws = ctx.scorer.score_batch(routed, ctx.config)
     boosted = _router.apply_crossover_boost(scored, ctx.config.crossover_pairs)
     counts_by_priority, scorer_failed = priority_counts(scored)
+    log(f"  -> {counts_by_priority}, failed {scorer_failed}, boosted {boosted}")
+
+    random_picks, random_report, random_summary = _random_stage(
+        ctx, scored, seen, deduped.new_keys, fetched.fetched_total, raws, log)
+
     usage = _manifest.summarize_llm_usage(raws)
     if usage["usage"]["calls"]:
         log(f"  -> LLM: {usage['usage']['calls']} calls, ~${usage['estimated_usd']} "
             f"({usage['price_window']})")
-    log(f"  -> {counts_by_priority}, failed {scorer_failed}, boosted {boosted}")
 
     if ctx.scorer.budget_exhausted:
         quality_flags.append("scorer_budget_exhausted")
@@ -148,16 +184,20 @@ def run_daily(ctx: RunContext, *, seen: SeenKeys | None = None, log=print) -> Ru
         ctx, started_at=started, run_status=run_status, quality_flags=quality_flags,
         window=fetched.window, sources_used=fetched.sources_used,
         source_status=fetched.source_status, counts=counts, raws=raws,
-        random_reading={"status": "disabled" if not ctx.random_reading else "not_run"},
-        model_snapshot=model_snapshot,
+        random_reading=random_summary, model_snapshot=model_snapshot,
     )
 
     run_path = None
+    random_path = None
     if fetched.fetched_total == 0:
         log("ABORT: every source returned nothing; no run file written (empty-run guard)")
     else:
         run_path = _persist.persist_stage(ctx, header, scored, aliases=aliases)
         log(f"Wrote {len(scored)} records -> {run_path}")
+        if random_report and random_report["journals"]:
+            random_header = _random.build_header(ctx, random_picks, random_report["journals"])
+            random_path = _random.persist_random(ctx, random_header, random_picks, aliases=aliases)
+            log(f"Wrote {len(random_picks)} random-reading records -> {random_path}")
         if not ctx.dry_run:
             seen.keys |= deduped.new_keys
             seen.through, seen.n_files = run_path.name, seen.n_files + 1
@@ -168,5 +208,6 @@ def run_daily(ctx: RunContext, *, seen: SeenKeys | None = None, log=print) -> Ru
         log(f"::warning::{line}")
     for line in verdict.blocking:
         log(f"::error::{line}")
-    return RunReport(run_path=run_path, header=header, papers=scored,
+    return RunReport(run_path=run_path, random_path=random_path, header=header,
+                     papers=scored, random_papers=random_picks,
                      blocking=verdict.blocking, warnings=verdict.warnings)

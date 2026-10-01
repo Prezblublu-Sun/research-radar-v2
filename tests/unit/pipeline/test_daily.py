@@ -111,6 +111,80 @@ def test_truncation_flag_and_replay_scoring_with_crossover_boost(make_ctx, stub_
     assert report.header["config"]["scorer_version"] == "replay"
 
 
+class _JournalStub:
+    """An openalex fetcher that also answers the random-reading journal calls."""
+    PAGE_LIMIT = 10_000
+
+    def __init__(self, inner, counts):
+        self.inner, self.counts, self.calls = inner, counts, []
+
+    def fetch(self, *args, **kwargs):
+        return self.inner.fetch(*args, **kwargs)
+
+    def journal_month_count(self, source_id, from_date, to_date):
+        self.calls.append(("count", source_id))
+        return self.counts.get(source_id, 0)
+
+    def journal_work_at(self, source_id, from_date, to_date, position):
+        self.calls.append(("draw", source_id, position))
+        return {"source": "openalex", "id": f"https://openalex.org/WR{position}",
+                "doi": f"10.9/random-{source_id}-{position}", "title": f"Random work {position}",
+                "abstract": "", "authors": [], "venue": "J", "venue_id": source_id,
+                "venue_type": "journal", "date": from_date, "year": 2026}
+
+
+def _with_journals(fetchers, counts):
+    from radar.pipeline.context import Fetchers
+    return Fetchers(arxiv=fetchers.arxiv, openalex=_JournalStub(fetchers.openalex, counts), pubmed=fetchers.pubmed)
+
+
+def test_random_stage_draws_from_high_journals_into_its_own_stream(make_ctx, stub_fetchers, sample_records, data_root, cfg):
+    journals = {r["venue_id"] for r in sample_records if r.get("venue_type") == "journal" and r.get("venue_id")}
+    assert journals, "fixture needs at least one journal record"
+    fetchers = _with_journals(stub_fetchers(**_by_source(sample_records)), {j: 40 for j in journals})
+    ctx = make_ctx(fetchers, offline=False, random_reading=True,
+                   scorer=ReplayScorer({}, default={"priority": "High"}))
+    report = daily.run_daily(ctx, log=lambda *_: None)
+
+    assert report.random_path == data_root.random_reading / "2026" / f"{ctx.run_id}.jsonl"
+    summary = report.header["random_reading"]
+    assert summary["status"] == "ok" and summary["journals"] >= 1 and summary["papers"] == len(report.random_papers) > 0
+    lines = report.random_path.read_text(encoding="utf-8").splitlines()
+    assert json.loads(lines[0])["kind"] == "random_reading"
+    random_keys = runs.scan_keys(report.random_path)
+    assert random_keys and random_keys.isdisjoint(runs.scan_keys(report.run_path))
+    # Isolation: random picks never enter the corpus seen set or the day's counts.
+    assert random_keys.isdisjoint(SeenKeys.load(data_root).keys)
+    assert sum(report.header["counts"]["priority_counts"].values()) == len(report.papers)
+    for paper in report.random_papers:
+        assert paper["llm"]["priority"] == "High" and paper["random_reading"]["venue_id"] in journals
+
+
+def test_random_stage_is_skipped_offline_and_when_disabled(make_ctx, stub_fetchers, sample_records, data_root):
+    fetchers = stub_fetchers(**_by_source(sample_records))
+    report = daily.run_daily(make_ctx(fetchers, offline=True, random_reading=True), log=lambda *_: None)
+    assert report.header["random_reading"] == {"status": "skipped_offline"} and report.random_path is None
+    report = daily.run_daily(make_ctx(fetchers, run_id="2026-10-02T120000Z", offline=False, random_reading=False),
+                             log=lambda *_: None)
+    assert report.header["random_reading"] == {"status": "disabled"}
+    assert not data_root.random_reading.exists()
+
+
+def test_random_stage_failure_never_fails_the_run(make_ctx, stub_fetchers, sample_records, monkeypatch):
+    from radar.pipeline import random_reading as rr
+
+    def boom(*a, **kw):
+        raise RuntimeError("serendipity exploded")
+
+    monkeypatch.setattr(rr, "collect", boom)
+    fetchers = stub_fetchers(**_by_source(sample_records))
+    report = daily.run_daily(make_ctx(fetchers, offline=False, random_reading=True,
+                                      scorer=ReplayScorer({}, default={"priority": "High"})), log=lambda *_: None)
+    assert report.ok and report.run_path is not None
+    assert report.header["random_reading"]["status"] == "failed"
+    assert "serendipity exploded" in report.header["random_reading"]["error"]
+
+
 def test_alias_resolver_failure_does_not_stop_the_run(make_ctx, stub_fetchers, sample_records, monkeypatch):
     from radar.sources import zenodo_aliases
 
