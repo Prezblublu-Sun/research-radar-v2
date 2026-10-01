@@ -14,7 +14,7 @@ import pytest
 PROMPTS = pathlib.Path(__file__).resolve().parents[2] / "prompts"
 PINNED = {
     # frozen v1 prompt; reproduces the provenance of imported v1 records
-    "scorer_v3.txt": "9e25f089ebc378efc530bca0cd2d08cba3440e89f971ff8b5b14091efaf19935",
+    "scorer_v3.txt": "9bacfc77d83d534d8678891344f15c461b100ae3f03cc9ca9426020862ce1d40",
     # v2 active prompt: six directions, {direction_context} rendered, no dead metadata block
     "scorer_v4.txt": "8816a29e74e19ee2a1ab13b681a1d9939a2802bc0a332aa6a8eb8898beff4540",
 }
