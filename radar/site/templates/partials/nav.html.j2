@@ -1,0 +1,11 @@
+{% macro site_nav(active) -%}
+<nav class="site-nav" aria-label="主导航">
+<a class="site-nav__brand" href="index.html">Research Radar</a>
+<div class="site-nav__links">
+{%- for key, href, label in nav %}
+{% if key == active %}<a href="{{ href }}" aria-current="page" class="site-nav__link is-active">{{ label }}</a>{% else %}<a href="{{ href }}" class="site-nav__link">{{ label }}</a>{% endif %}
+{%- endfor %}
+<details class="site-nav__admin"{% if active == "admin" %} open{% endif %}><summary>系统</summary><div class="site-nav__menu"><a href="status.html">运行状态</a></div></details>
+</div>
+</nav>
+{%- endmacro %}

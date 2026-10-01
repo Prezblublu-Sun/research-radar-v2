@@ -29,6 +29,7 @@ radar daily --dry-run --offline --fixture tests/fixtures/fetch/sample.jsonl
 radar daily --dry-run                          # real fetch, no scoring, no key needed
 radar daily                                    # needs OPENAI_API_KEY (DeepSeek)
 radar health --max-age-hours 6                 # the workflow's health gate on the newest run
+radar site build --out _site                   # the static site from data/ (add --data .radar-dryrun/data to preview a dry run)
 radar alerts render --job run --conclusion failure --out-dir /tmp/alert   # what the alert issue would say
 ```
 

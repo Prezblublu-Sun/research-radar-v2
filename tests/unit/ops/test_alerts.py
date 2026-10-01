@@ -41,6 +41,14 @@ def test_job_failure_comments_with_the_run_url(data_root):
     assert alert.outputs["alert"] == "true"
 
 
+def test_failed_publish_is_an_alert_even_when_the_run_succeeded(data_root):
+    _run(data_root, "2026-10-02T121700Z")
+    alert = alerts.render(data_root, job="run", conclusion="success", run_url="", now=NOW, publish_conclusion="failure")
+    assert alert.alerting and "Pages 没有更新" in alert.comment
+    skipped = alerts.render(data_root, job="run", conclusion="success", run_url="", now=NOW, publish_conclusion="skipped")
+    assert not skipped.alerting
+
+
 def test_blocked_gate_comments_with_the_reason(data_root):
     _run(data_root, "2026-10-02T121700Z", status="failed", flags=["fetched_zero"])
     alert = alerts.render(data_root, job="run", conclusion="success", run_url="", now=NOW)

@@ -84,7 +84,8 @@ def _row(header: dict) -> str:
 
 
 def render(root: DataRoot, *, job: str, conclusion: str, run_url: str,
-           now: dt.datetime | None = None, max_age_hours: float = 30.0) -> Alert:
+           now: dt.datetime | None = None, max_age_hours: float = 30.0,
+           publish_conclusion: str = "") -> Alert:
     now = now or dt.datetime.now(dt.timezone.utc)
     headers = recent_headers(root)
     latest = headers[0] if headers else None
@@ -93,6 +94,8 @@ def render(root: DataRoot, *, job: str, conclusion: str, run_url: str,
     reasons: list[str] = []
     if conclusion != "success":
         reasons.append(f"工作流任务 `{plain(job, 40)}` 结束状态为 **{plain(conclusion, 20)}**（通常是某一步抛错，见运行日志）")
+    if publish_conclusion in ("failure", "cancelled", "timed_out"):
+        reasons.append(f"站点发布任务结束状态为 **{plain(publish_conclusion, 20)}**（数据已提交，但 Pages 没有更新）")
     reasons += [plain(line) for line in verdict.blocking]
     age = _age_hours(latest, now) if latest else None
     if latest and age is not None and age > max_age_hours:

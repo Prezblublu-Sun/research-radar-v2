@@ -1,0 +1,19 @@
+{% import "partials/nav.html.j2" as navbar %}
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research Radar — {% block title %}{% endblock %}</title>
+<link rel="stylesheet" href="{{ asset('radar-ui.css') }}">
+<script src="{{ asset('radar-ui.js') }}" defer></script>
+<script src="{{ asset('radar-card.js') }}" defer></script>
+{% block scripts %}{% endblock %}
+</head>
+<body>
+{{ navbar.site_nav(active) }}
+<main id="main-content" class="container"{% block main_attrs %}{% endblock %}>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

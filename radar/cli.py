@@ -144,12 +144,26 @@ def cmd_alerts_render(args) -> int:
     from radar.ops import alerts
     root = DataRoot.at(_repo(args) / "data")
     alert = alerts.render(root, job=args.job, conclusion=args.conclusion, run_url=args.run_url or "",
-                          max_age_hours=args.max_age_hours)
+                          max_age_hours=args.max_age_hours, publish_conclusion=args.publish_conclusion or "")
     alerts.write_files(alert, pathlib.Path(args.out_dir),
                        pathlib.Path(args.github_output) if args.github_output else None)
     print(alert.body)
     print(f"alerts: {'COMMENT' if alert.alerting else 'body only'} -> {args.out_dir}")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# radar site
+# ---------------------------------------------------------------------------
+
+def cmd_site_build(args) -> int:
+    from radar.site import build as _build
+    repo = _repo(args)
+    cfg = _config.load(repo / "config" / "directions.yaml")
+    data_root = DataRoot.at(pathlib.Path(args.data).resolve() if args.data else repo / "data")
+    out = pathlib.Path(args.out).resolve() if args.out else repo / "_site"
+    report = _build.build_site(data_root, out, cfg, repo=args.repo_slug or "")
+    return 0 if report.ok else 1
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +242,16 @@ def build_parser() -> argparse.ArgumentParser:
     render.add_argument("--out-dir", required=True)
     render.add_argument("--github-output", help="append alert=true|false etc. to this file")
     render.add_argument("--max-age-hours", type=float, default=30.0)
+    render.add_argument("--publish-conclusion", default="", help="result of the publish job, if any")
     render.set_defaults(func=cmd_alerts_render)
+
+    site = sub.add_parser("site", help="the static site")
+    site_sub = site.add_subparsers(dest="site_command", required=True)
+    site_build = site_sub.add_parser("build", help="render data/ into a static site (never commits)")
+    site_build.add_argument("--data", help="data directory (default: ./data; e.g. .radar-dryrun/data)")
+    site_build.add_argument("--out", help="output directory (default: ./_site)")
+    site_build.add_argument("--repo", dest="repo_slug", default="", help="owner/name, written to site-manifest.json")
+    site_build.set_defaults(func=cmd_site_build)
 
     ev = sub.add_parser("eval", help="ground-truth checks")
     ev_sub = ev.add_subparsers(dest="eval_command", required=True)

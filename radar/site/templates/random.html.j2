@@ -1,0 +1,28 @@
+{% extends "base.html.j2" %}
+{% import "partials/filters.html.j2" as filters %}
+{% set active = "random" %}
+{% block title %}随机阅读{% endblock %}
+{% block scripts %}<script src="{{ asset('radar-random.js') }}" defer></script>{% endblock %}
+{% block content %}
+<div class="eyebrow">Serendipity</div>
+<h1>随机阅读</h1>
+{{ filters.marks_bar() }}
+<p class="page-intro">雷达只会找到像你自己工作的论文。当天出现 High 论文，说明它所在的期刊正在你关心的邻域出版——而那本期刊当月绝大多数论文都匹配不上任何关键词，因此永远不会出现在雷达里。这里每天从这些期刊随机抽当月论文，用同一套评分器评价并记录：<b>专业刊抽 5 篇，月发文超过 200 篇的大刊只抽 2 篇</b>。<b>它们不是雷达推荐</b>：不进语料库、不进队列，评成 Low 很正常，读它们本来就是为了跳出关键词。</p>
+{% for day in days %}
+<section class="random-day" data-run-id="{{ day.run_id }}">
+<h2>{{ day.date }}{% if day.top_up_of %} <small>（补抽）</small>{% endif %}</h2>
+<p class="subtitle">{{ day.counts.journals or 0 }} 本期刊 · {{ day.counts.papers or 0 }} 篇随机阅读</p>
+{% for journal in day.journals %}
+<section class="random-journal" data-journal-id="{{ journal.venue_id }}">
+<h3>{{ journal.venue }}</h3>
+{% if journal.seed_title %}<p class="random-seed">因为当天的 High：{{ journal.seed_title }}</p>{% endif %}
+<p class="random-meta">{{ journal.meta }}</p>
+<div class="paper-grid" data-journal-cards>{% if not journal.papers %}<p class="run-note">这本期刊本月没有可抽取的新论文。</p>{% endif %}</div>
+</section>
+{% endfor %}
+<div class="run-section__status" data-random-status aria-live="polite"></div>
+</section>
+{% else %}
+<p class="run-note">还没有随机阅读记录。它在每日运行里产生：当天出现 High 论文时，其所属期刊随机抽当月论文评价并记录（专业刊 5 篇，大刊 2 篇）。没有 High 论文的日子就没有记录。</p>
+{% endfor %}
+{% endblock %}

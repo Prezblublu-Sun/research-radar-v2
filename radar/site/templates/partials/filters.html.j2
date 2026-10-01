@@ -1,0 +1,18 @@
+{# The only emitter of #rui-priority-filter and #rui-marks-filter.
+   radar-ui.js applies a filter only on a page that shows its control, so
+   including a bar here is what makes that filter apply. #}
+{% macro priority_bar() -%}
+<div class="rui-filter-bar" id="rui-priority-filter"><b>等级：</b> {% for prio in ["High", "Medium", "Low", "Exclude"] %}<label><input type="checkbox" class="rui-pf-cb" value="{{ prio }}"{% if prio in ["High", "Medium"] %} checked{% endif %}>{{ prio }}</label> {% endfor %}</div>
+{%- endmacro %}
+
+{% macro marks_bar() -%}
+<div class="rui-filter-bar" id="rui-marks-filter"><b>我的标记：</b> {% for val, label in [("to-read", "待阅读"), ("read", "已阅读"), ("ignore", "忽略"), ("none", "未标记")] %}<label><input type="checkbox" class="rui-mf-cb" value="{{ val }}" checked>{{ label }}</label>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro direction_tabs(config) -%}
+<div class="tabs" aria-label="研究方向筛选"><button class="tab active" data-filter="all">全部方向</button>{% for key in config.keys %}<button class="tab" data-filter="{{ key }}">{{ config.display_name(key) }}</button>{% endfor %}</div>
+{%- endmacro %}
+
+{% macro pills(items) -%}
+{% for mod, label in items %}<span class="pill pill--{{ mod }}">{{ label }}</span>{% endfor %}
+{%- endmacro %}

@@ -23,7 +23,7 @@ radar = "radar.cli:main"
 include = ["radar*"]
 
 [tool.setuptools.package-data]
-radar = ["site/templates/**/*.j2", "site/static/*"]
+radar = ["site/templates/*.j2", "site/templates/partials/*.j2", "site/static/*"]
 
 [build-system]
 requires = ["setuptools>=68"]

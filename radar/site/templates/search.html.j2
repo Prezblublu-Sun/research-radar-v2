@@ -1,0 +1,26 @@
+{% extends "base.html.j2" %}
+{% set active = "search" %}
+{% block title %}搜索{% endblock %}
+{% block scripts %}<script src="{{ asset('radar-search.js') }}" defer></script>{% endblock %}
+{% block content %}
+<div class="eyebrow">Metadata-first corpus search</div>
+<h1>搜索 {{ total }} 篇论文</h1>
+<p class="subtitle">默认搜索标题、作者、期刊、标签与首要术语；完整术语、摘要和中文总结按年份深搜。</p>
+<label class="search-box">
+  <span>关键词</span>
+  <input id="search-query" type="search" autocomplete="off" placeholder="输入标题、作者、标签或术语…" autofocus>
+</label>
+<div class="search-toolbar" aria-label="搜索筛选">
+  <label>方向<select id="search-direction"><option value="">全部方向</option>{% for key in config.keys %}<option value="{{ key }}">{{ config.display_name(key) }}</option>{% endfor %}</select></label>
+  <label>等级<select id="search-priority"><option value="">全部等级</option><option>High</option><option>Medium</option><option>Low</option><option>Exclude</option></select></label>
+  <label>相关性<select id="search-relevance"><option value="">全部</option><option>Direct</option><option>Transferable</option><option>Peripheral</option></select></label>
+  <label>发表年份<select id="search-year"><option value="">全部年份</option></select></label>
+</div>
+<div class="deep-search-control">
+  <label><input id="search-deep-toggle" type="checkbox"> 搜索摘要、中文总结与相关性说明</label>
+  <label>深搜年份<select id="search-deep-year"><option value="">请选择年份</option></select></label>
+</div>
+<div id="search-status" class="search-status" aria-live="polite">正在载入轻量索引…</div>
+<div id="search-results" class="search-results"></div>
+<button type="button" id="search-more" class="rui-btn search-more" hidden>加载更多结果</button>
+{% endblock %}

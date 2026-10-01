@@ -1,0 +1,35 @@
+{% extends "base.html.j2" %}
+{% set active = "reading" %}
+{% block title %}阅读清单{% endblock %}
+{% block scripts %}<script src="{{ asset('radar-reading.js') }}" defer></script>{% endblock %}
+{# Exempt from the shared filters: it shows exactly what the reader marked. #}
+{% block main_attrs %} data-rui-no-filter="1"{% endblock %}
+{% block content %}
+<div class="eyebrow">Local reading list</div>
+<h1>阅读清单</h1>
+<p class="subtitle">这个浏览器里手动标记过的论文：按状态分栏，可按标签筛选，可搜索标题与笔记，卡片上可直接改标记、加标签、写笔记。</p>
+<div class="queue-toolbar reading-toolbar" aria-label="阅读清单筛选">
+  <div class="segmented" id="reading-state">
+    <button type="button" data-state="to-read" class="is-active">待阅读</button>
+    <button type="button" data-state="read">已阅读</button>
+    <button type="button" data-state="ignore">忽略</button>
+    <button type="button" data-state="note">仅笔记</button>
+    <button type="button" data-state="all">全部</button>
+  </div>
+  <label class="reading-search">搜索<input id="reading-query" type="search" autocomplete="off" placeholder="标题、笔记、标签、方向、日期…"></label>
+  <label>标签<select id="reading-tag"><option value="">全部标签</option></select></label>
+  <label>排序<select id="reading-sort"><option value="marked">最近标记</option><option value="date">发表日期</option><option value="title">标题</option></select></label>
+  <button type="button" class="rui-btn rui-secondary" id="reading-copy">复制当前清单为 Markdown</button>
+</div>
+<div class="queue-status" id="reading-status" aria-live="polite">正在读取本地标记…</div>
+<div id="reading-results" class="paper-grid"></div>
+<nav class="queue-pagination" id="reading-pagination" aria-label="阅读清单分页" hidden>
+  <button type="button" class="queue-page-button" id="reading-prev">← 上一页</button>
+  <label class="queue-page-picker" for="reading-page">页码
+    <select id="reading-page" aria-label="选择页码"></select>
+  </label>
+  <span class="queue-page-total" id="reading-page-total">共 1 页</span>
+  <button type="button" class="queue-page-button" id="reading-next">下一页 →</button>
+</nav>
+<p class="reading-footnote">标记与笔记只保存在当前浏览器；在 <a href="library.html#marks">资料库</a> 可导出 JSON 备份。</p>
+{% endblock %}

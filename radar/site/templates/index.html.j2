@@ -1,0 +1,32 @@
+{% extends "base.html.j2" %}
+{% import "partials/filters.html.j2" as filters %}
+{% set active = "today" %}
+{% block title %}今日工作台{% endblock %}
+{% block scripts %}<script src="{{ asset('radar-workbench.js') }}" defer></script>{% endblock %}
+{% block content %}
+<div class="workbench-hero">
+  <div><div class="eyebrow">Research triage</div>
+  <h1>最近 {{ runs | length }} 次运行</h1>
+  <p class="subtitle">按 Radar 首次发现的运行汇总；High 与 Medium 默认展开完整中文摘要，每次运行最多内嵌 {{ 150 }} 篇。</p></div>
+  <a class="health-summary{% if latest and latest.quality_flags %} health-summary--warning{% endif %}" href="status.html">
+    <span>最近运行</span><strong>{{ latest.run_id if latest else "暂无运行记录" }}</strong>
+    <small>{% if latest and latest.quality_flags %}{{ latest.quality_flags | join(" · ") }}{% else %}运行正常{% endif %}</small>
+  </a>
+</div>
+<div class="corpus-note">全库 {{ stats.unique_total }} 篇唯一论文 · 合并 {{ stats.duplicates_suppressed }} 条重复观测</div>
+{{ filters.marks_bar() }}
+{% for run in runs %}
+<section class="run-section" data-run-id="{{ run.run_id }}">
+  <div class="run-section__head"><div><div class="eyebrow">{{ run.run_status }}</div>
+  <h2>{{ run.date }} 新发现</h2></div>
+  <div class="run-section__counts">{{ filters.pills(run.pills) }}</div></div>
+  {% if run.quality_flags %}<div class="run-warning"><b>运行提示：</b> {{ run.quality_flags | join("、") }}</div>{% endif %}
+  {% if run.total > run.embedded %}<div class="run-note">本次运行共 {{ run.total }} 篇，首页只内嵌优先级最高的 {{ run.embedded }} 篇；其余请到队列页或对应发表日期页查看。</div>{% endif %}
+  {% if run.random_reading and run.random_reading.papers %}<div class="run-note">随机阅读抽了 {{ run.random_reading.papers }} 篇，见 <a href="random-reading.html">随机阅读</a>。</div>{% endif %}
+  <div class="run-section__status" data-run-status aria-live="polite">正在加载本次运行的论文…</div>
+  <div data-run-cards></div>
+</section>
+{% else %}
+<div class="empty-state"><h2>尚无可展示的最新运行</h2><p>工作台将在下一次成功日跑后自动填充。</p></div>
+{% endfor %}
+{% endblock %}

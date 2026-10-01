@@ -1,0 +1,40 @@
+{% extends "base.html.j2" %}
+{% import "partials/filters.html.j2" as filters %}
+{% set active = "archive" %}
+{% block title %}{{ month }}{% endblock %}
+{% block content %}
+<div class="eyebrow">月份归档</div>
+<h1>{{ month }}</h1>
+<div class="subtitle">{{ days | length }} 个发表日期 · 卡片展示当日最高等级论文</div>
+<div class="month-topbar">
+<a class="month-topbar__back" href="archive.html">← 返回归档</a>
+{% if previous_month %}<a class="month-topbar__nav" href="month-{{ previous_month }}.html">← {{ previous_month }}</a>{% else %}<span class="month-topbar__nav month-topbar__nav--disabled">← oldest</span>{% endif %}
+<span class="month-topbar__title">{{ month }} · {{ days | length }} day(s)</span>
+{% if next_month %}<a class="month-topbar__nav" href="month-{{ next_month }}.html">{{ next_month }} →</a>{% else %}<span class="month-topbar__nav month-topbar__nav--disabled">latest →</span>{% endif %}
+</div>
+<div class="day-grid">
+{% for day in days %}
+<article class="day-card{% if day.low_quality or not day.top %} day-card--low-quality{% endif %}">
+<div class="day-card__head"><a class="day-card__date" href="{{ day.date }}.html">{{ day.date }}</a><div class="day-card__pills">{{ filters.pills(day.pills) }}</div></div>
+{% if day.top and not day.low_quality %}
+{% set td = day.top %}
+<div class="day-card__top">
+<div class="day-card__title">{% if td.is_high %}★ {% endif %}{{ td.title }}</div>
+{% set authors = (td.authors[:2] | join(", ") ~ " et al.") if td.authors | length > 2 else td.authors | join(", ") %}
+<div class="day-card__meta">{{ authors }}{% if td.direction_name %} · <span class="direction-pill" style="background:{{ td.direction_color }}20;color:{{ td.direction_color }}">{{ td.direction_name }}</span>{% endif %}</div>
+{% if td.venue or td.tags %}<div class="day-card__tags">{% if td.venue %}<span class="venue">{{ td.venue }}</span>{% endif %}{% for t in td.tags %}<span class="tag">#{{ t }}</span>{% endfor %}</div>{% endif %}
+{% if td.motivation %}<div class="day-card__motivation"><span class="motivation-label">💡</span> {{ td.motivation }}</div>{% endif %}
+{% if td.method or td.result or td.validation or td.relevance_to_user %}
+<details class="day-card__expand"><summary>Read more</summary>
+{% if td.method %}<div><b>方法</b>: {{ td.method }}</div>{% endif %}
+{% if td.result %}<div><b>结果</b>: {{ td.result }}</div>{% endif %}
+{% if td.validation %}<div><b>验证</b>: {{ td.validation }}</div>{% endif %}
+{% if td.relevance_to_user %}<div><b>相关性</b>: {{ td.relevance_to_user }}</div>{% endif %}
+</details>
+{% endif %}
+</div>
+{% endif %}
+</article>
+{% endfor %}
+</div>
+{% endblock %}

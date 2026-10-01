@@ -1,0 +1,30 @@
+{% extends "base.html.j2" %}
+{% import "partials/filters.html.j2" as filters %}
+{% set active = "queue" %}
+{% block title %}论文队列{% endblock %}
+{% block scripts %}<script src="{{ asset('radar-queue.js') }}" defer></script>{% endblock %}
+{% block content %}
+<div class="eyebrow">Canonical corpus queue</div>
+<h1>论文队列</h1>
+<p class="subtitle">High 与 Medium 共用一个队列；完整中文摘要按年份加载。</p>
+<div class="queue-toolbar" aria-label="队列筛选">
+  <div class="segmented" id="queue-priority">
+    <button type="button" data-priority="High" class="is-active">High</button>
+    <button type="button" data-priority="Medium">Medium</button>
+  </div>
+  <label>方向<select id="queue-direction"><option value="">全部方向</option></select></label>
+  <label>年份<select id="queue-year"><option value="">全部年份</option></select></label>
+  <label>相关性<select id="queue-relevance"><option value="">全部</option><option>Direct</option><option>Transferable</option><option>Peripheral</option></select></label>
+</div>
+{{ filters.marks_bar() }}
+<div class="queue-status" id="queue-status" aria-live="polite">正在加载队列…</div>
+<div id="queue-results" class="paper-grid"></div>
+<nav class="queue-pagination" id="queue-pagination" aria-label="论文队列分页" hidden>
+  <button type="button" class="queue-page-button" id="queue-prev">← 上一页</button>
+  <label class="queue-page-picker" for="queue-page">页码
+    <select id="queue-page" aria-label="选择页码"></select>
+  </label>
+  <span class="queue-page-total" id="queue-page-total">共 0 页</span>
+  <button type="button" class="queue-page-button" id="queue-next">下一页 →</button>
+</nav>
+{% endblock %}

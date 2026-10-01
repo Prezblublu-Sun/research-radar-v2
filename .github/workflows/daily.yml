@@ -26,6 +26,8 @@ on:
 permissions:
   contents: write
   issues: write
+  pages: write
+  id-token: write
 
 concurrency:
   # Shared with every other job that commits to main.
@@ -97,11 +99,18 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # publish: added in Phase 3 (uses: ./.github/workflows/pages-build.yml,
-  # if: !cancelled() && needs.run.outputs.committed == 'true').
+  publish:
+    needs: [run]
+    # Publish whatever was committed, even when a later step of `run` failed.
+    if: ${{ !cancelled() && needs.run.outputs.committed == 'true' }}
+    uses: ./.github/workflows/pages-build.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
 
   alert:
-    needs: [run]
+    needs: [run, publish]
     if: ${{ always() && !inputs.dry_run }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -130,6 +139,7 @@ jobs:
           radar alerts render \
             --job run \
             --conclusion "${{ needs.run.result }}" \
+            --publish-conclusion "${{ needs.publish.result }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --out-dir "$RUNNER_TEMP/alert" \
             --github-output "$GITHUB_OUTPUT"

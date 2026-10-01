@@ -1,0 +1,22 @@
+{% extends "base.html.j2" %}
+{% import "partials/filters.html.j2" as filters %}
+{% set active = "archive" %}
+{% block title %}归档{% endblock %}
+{% block content %}
+<div class="eyebrow">Publication archive</div>
+<h1>发表日期归档</h1>
+<div class="subtitle">覆盖 {{ config.keys | length }} 个研究方向 · 等级计数基于唯一论文</div>
+<p class="page-intro">选择年份和月份查看论文；灰色月份没有 High 或 Medium。</p>
+{% for year in archive.years %}
+<details class="archive-year"{% if year.open %} open{% endif %}><summary>{{ year.year }}</summary>
+<div class="month-grid">
+{% for m in year.months %}<a class="month-card{% if m.low_quality %} month-card--low-quality{% endif %}" href="month-{{ m.month }}.html"><div class="month-card__label">{{ m.month }}</div><div class="month-card__pills">{{ filters.pills(m.pills) }}</div></a>{% endfor %}
+</div></details>
+{% endfor %}
+{% if archive.future %}
+<details class="archive-year archive-year--future"><summary>未来或低精度发表日期</summary>
+<p>这些月份来自出版源元数据，不代表 Radar 的发现时间。</p>
+<div class="month-grid">{% for m in archive.future %}<a class="month-card{% if m.low_quality %} month-card--low-quality{% endif %}" href="month-{{ m.month }}.html"><div class="month-card__label">{{ m.month }}</div><div class="month-card__pills">{{ filters.pills(m.pills) }}</div></a>{% endfor %}</div>
+</details>
+{% endif %}
+{% endblock %}

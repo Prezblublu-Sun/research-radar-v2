@@ -1,0 +1,83 @@
+name: pages-build
+
+# Build the static site from data/ and deploy it to GitHub Pages.
+#
+# Reusable: every workflow that commits data calls this one as its publish
+# job (`uses: ./.github/workflows/pages-build.yml`). A bot push made with
+# GITHUB_TOKEN never fires `push`, and v1's hand-maintained workflow_run
+# list once silently stopped publishing a writer that was not on it.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "radar/**"
+      - "config/**"
+      - "pyproject.toml"
+      - ".github/workflows/pages-build.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: radar-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Build the site
+        run: radar site build --out _site --repo "${{ github.repository }}"
+
+      - name: Validate the artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f _site/index.html
+          site_bytes="$(du -sb _site | cut -f1)"
+          if [ "$site_bytes" -ge 1000000000 ]; then
+            echo "::error::Pages artifact is ${site_bytes} bytes; must be under 1 GB."
+            exit 1
+          fi
+          if [ -n "$(find _site -type l -print -quit)" ]; then
+            echo "::error::Pages artifact contains a symlink."
+            exit 1
+          fi
+          echo "Validated ${site_bytes}-byte Pages artifact."
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

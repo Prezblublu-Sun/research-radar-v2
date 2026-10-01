@@ -1,0 +1,28 @@
+{% extends "base.html.j2" %}
+{% import "partials/filters.html.j2" as filters %}
+{% set active = "archive" %}
+{% block title %}{{ date }}{% endblock %}
+{% block scripts %}<script src="{{ asset('radar-day.js') }}" defer></script>{% endblock %}
+{% block main_attrs %} data-date="{{ date }}"{% endblock %}
+{% block content %}
+<div class="eyebrow">发表日期</div>
+<h1>{{ date }}</h1>
+<div class="subtitle">按论文发表日期归档 · 每页 {{ page_size }} 篇 · 默认显示 High 与 Medium</div>
+<div class="topbar">
+{% if previous_date %}<a class="navbtn" href="{{ previous_date }}.html">← {{ previous_date }}</a>{% else %}<span class="navbtn disabled">← 最早</span>{% endif %}
+<a class="navbtn" href="archive.html">查看完整归档</a>
+{% if next_date %}<a class="navbtn" href="{{ next_date }}.html">{{ next_date }} →</a>{% else %}<span class="navbtn disabled">最新 →</span>{% endif %}
+</div>
+<div id="day-stats" class="stats" aria-live="polite"></div>
+{{ filters.direction_tabs(config) }}
+{{ filters.priority_bar() }}
+{{ filters.marks_bar() }}
+<div id="day-status" class="queue-status" aria-live="polite">正在载入论文数据…</div>
+<div id="day-results" class="paper-grid"></div>
+<nav id="day-pagination" class="queue-pagination" aria-label="每日论文分页" hidden>
+  <button type="button" id="day-prev" class="rui-btn rui-secondary">← 前一页</button>
+  <label>页面 <select id="day-page"></select></label>
+  <span id="day-page-total"></span>
+  <button type="button" id="day-next" class="rui-btn rui-secondary">后一页 →</button>
+</nav>
+{% endblock %}

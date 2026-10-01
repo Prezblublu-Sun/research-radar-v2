@@ -1,0 +1,42 @@
+{% extends "base.html.j2" %}
+{% set active = "library" %}
+{% block title %}资料库{% endblock %}
+{% block content %}
+<h1>资料库</h1>
+<div class="subtitle">浏览器本地的阅读标记与笔记</div>
+<div class="library-grid">
+  <section id="marks" class="library-panel">
+    <div class="eyebrow">Local reading trail</div>
+    <h2>我的标记与笔记</h2>
+    <p>仅保存在当前浏览器。新标记会同时保存标题、日期和方向；旧记录保持兼容。</p>
+    <p><a class="rui-link-tool" href="reading.html">按标记状态浏览完整卡片 →</a></p>
+    <button type="button" class="rui-btn" id="rui-export-marks">导出标记 JSON</button>
+    <div id="rui-marks-list"></div>
+  </section>
+  <section id="sync" class="library-panel">
+    <div class="eyebrow">Marks hand-off</div>
+    <h2>同步标记到仓库</h2>
+    <p>把这个浏览器里的标记与笔记打包成一条 <code>marks-sync</code> issue 提交，工作流校验后写入 <code>data/marks/</code>，从此有 git 历史、可跨设备合并。页面不持有任何令牌，提交用的是你自己的 GitHub 登录。</p>
+    <button type="button" class="rui-btn" id="rui-sync-marks">打包并提交标记</button>
+    <div id="rui-sync-panel"></div>
+  </section>
+  <section id="autosync" class="library-panel">
+    <div class="eyebrow">Automatic sync</div>
+    <h2>自动同步（可选）</h2>
+    <p>填入一个 GitHub 细粒度令牌后，改动标记几秒后会自动提交到仓库，不用再走上面的 issue 流程。令牌请<b>只勾选这一个仓库</b>、权限<b>只给 Contents 读写</b>，并设一个到期日。</p>
+    <p class="rui-warn">令牌保存在这个浏览器的 localStorage 里：能接触到这个浏览器配置的人就能写你的仓库。不想留就用下面的“忘记令牌”删掉，随时可以重新填。</p>
+    <p><input type="password" id="rui-token-input" class="rui-token-input" autocomplete="off" spellcheck="false" placeholder="github_pat_..."></p>
+    <p>
+      <button type="button" class="rui-btn" id="rui-token-save">保存并验证</button>
+      <button type="button" class="rui-btn rui-secondary" id="rui-token-now">立即同步</button>
+      <button type="button" class="rui-btn rui-secondary" id="rui-token-forget">忘记令牌</button>
+    </p>
+    <div id="rui-token-status" class="rui-mail-status"></div>
+  </section>
+  <section id="mail" class="library-panel">
+    <div class="eyebrow">Mail hand-off</div>
+    <h2>把卡片发到邮箱</h2>
+    <p>每张卡片上的“发送到邮箱”按钮会展开一个面板：完整正文（标题、来源、原文链接、雷达卡片地址、相关性与中文摘要）放在文本框里并尝试复制到剪贴板，同时提供一个“用邮件客户端打开”的链接。站点是静态页面，不会代为发信。</p>
+  </section>
+</div>
+{% endblock %}

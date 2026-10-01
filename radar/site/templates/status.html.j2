@@ -1,0 +1,47 @@
+{% extends "base.html.j2" %}
+{% set active = "admin" %}
+{% block title %}运行状态{% endblock %}
+{% block content %}
+<div class="eyebrow">System health</div>
+<h1>运行状态</h1>
+<div class="subtitle">最近 {{ rows | length }} 次运行 · 由每次运行日志的头部自动生成</div>
+<div class="table-scroll"><table class="status-table">
+<thead><tr><th>运行</th><th>类型</th><th>状态</th><th>抓取</th><th>去重后</th><th>路由后</th><th>High/Med</th><th>随机阅读</th><th>估算 USD</th><th>质量提示</th><th>提交</th></tr></thead>
+<tbody>
+{% for r in rows %}
+<tr>
+  <td><a href="index.html">{{ r.run_id }}</a></td>
+  <td>{{ r.run_type }}</td>
+  <td><span class="run-status run-status--{{ r.run_status }}">{{ r.run_status }}</span></td>
+  <td>{{ r.fetched }}</td><td>{{ r.after_dedup }}</td><td>{{ r.after_routing }}</td>
+  <td>{{ r.high_medium }}</td><td>{{ r.random }}</td><td>{{ r.usd }}</td>
+  <td>{% for q in r.quality_flags %}<span class="qflag">{{ q }}</span>{% else %}<span class="ok">—</span>{% endfor %}</td>
+  <td><code>{{ r.commit }}</code></td>
+</tr>
+{% else %}
+<tr><td colspan="11">暂无运行记录。</td></tr>
+{% endfor %}
+</tbody>
+</table></div>
+<div class="legend">
+<h2>状态说明</h2>
+<ul>
+<li><b>success</b>：正常运行并写入数据。</li>
+<li><b>partial_success</b>：某个数据源异常，但保留了有效结果。</li>
+<li><b>failed</b>：所有数据源都没有返回，没有写入任何记录。</li>
+</ul>
+</div>
+{% if latest %}
+<footer class="run-info">
+  <details><summary>Run version info</summary>
+    <table>
+      <tr><td>run_id</td><td>{{ latest.run_id }}</td></tr>
+      <tr><td>git_commit</td><td><code>{{ latest.git_commit }}</code></td></tr>
+      <tr><td>directions.yaml</td><td><code>{{ latest.config.directions_yaml }}</code></td></tr>
+      <tr><td>scorer prompt</td><td>{{ latest.config.scorer_prompt_file }} <code>{{ latest.config.scorer_prompt }}</code></td></tr>
+      <tr><td>LLM model</td><td>{{ latest.llm.model_alias }} (snapshot: <code>{{ latest.llm.model_snapshot_observed or "—" }}</code>)</td></tr>
+    </table>
+  </details>
+</footer>
+{% endif %}
+{% endblock %}
